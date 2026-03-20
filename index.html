@@ -1253,12 +1253,10 @@ table.inv-table {
         </div>
         <div class="photo-preview" id="photo-preview">
           <img id="photo-img" src="" alt="Producto">
-          <div style="display:flex;gap:6px;flex-wrap:wrap;justify-content:center">
-            <button class="btn-analyze" id="btn-analyze" onclick="analyzePhoto()">✨ Analizar con IA</button>
-            <button class="btn-analyze" id="btn-rembg" onclick="removeBg()" style="background:var(--surf-2);border:1px solid var(--border);color:var(--text-2)">🪄 Quitar fondo</button>
-          </div>
+          <button class="btn-analyze" id="btn-analyze" onclick="analyzePhoto()">✨ Analizar con IA</button>
         </div>
         <div class="analyze-status" id="analyze-status"></div>
+        <button id="btn-rembg" onclick="removeBg()" style="display:none;width:100%;margin-top:6px;padding:8px;border-radius:8px;border:1px solid var(--border);background:var(--surf-2);color:var(--text-2);font-family:var(--ff-disp);font-size:13px;font-weight:700;cursor:pointer;letter-spacing:.5px;">🪄 QUITAR FONDO</button>
       </div>
 
       <div class="form-row">
@@ -2016,6 +2014,7 @@ function onPhotoSelected(event) {
     document.getElementById('photo-img').src = dataUrl;
     document.getElementById('photo-preview').style.display = 'block';
     document.getElementById('photo-zone').style.display = 'none';
+    document.getElementById('btn-rembg').style.display = 'block';
     document.getElementById('analyze-status').textContent = 'Imagen lista. Pulsa "Analizar con IA" para extraer los datos.';
   };
   reader.readAsDataURL(file);
@@ -2091,6 +2090,7 @@ function resetPhotoZone() {
   document.getElementById('photo-input').value = '';
   document.getElementById('photo-preview').style.display = 'none';
   document.getElementById('photo-zone').style.display = 'flex';
+  document.getElementById('btn-rembg').style.display = 'none';
   document.getElementById('photo-img').src = '';
   document.getElementById('analyze-status').textContent = '';
   document.getElementById('btn-analyze').disabled = false;
