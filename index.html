@@ -319,6 +319,11 @@ nav#topnav {
 .prod-card .prod-stock.out-txt { color: var(--danger); font-weight: 600; }
 /* prod-info-col: en desktop es transparente (el flex-col del card maneja el layout) */
 .prod-card .prod-info-col { display: contents; }
+/* Miniatura de producto */
+.prod-card .prod-thumb {
+  width: 48px; height: 48px; object-fit: contain;
+  border-radius: 6px; margin-bottom: 2px; flex-shrink: 0;
+}
 .prod-card::after {
   content: '+'; position: absolute; inset: 0;
   display: flex; align-items: center; justify-content: center;
@@ -1540,8 +1545,11 @@ function renderProducts() {
   grid.innerHTML = filtered.map(p => {
     const stockClass = p.stock === 0 ? 'out-txt' : p.stock <= p.alert ? 'low' : '';
     const stockTxt = p.stock === 0 ? 'Sin stock' : `Stock: ${p.stock}`;
+    const thumb = p.thumbnail
+      ? `<img src="${p.thumbnail}" class="prod-thumb" alt="">`
+      : `<div class="prod-emoji">${p.emoji}</div>`;
     return `<div class="prod-card ${p.stock===0?'out':''}" onclick="addToCart(${p.id})">
-      <div class="prod-emoji">${p.emoji}</div>
+      ${thumb}
       <div class="prod-info-col">
         <div class="prod-name">${p.name}</div>
         <div class="prod-price">${fmt(p.price)}</div>
@@ -1970,7 +1978,7 @@ function renderInventario() {
     const sc = p.stock === 0 ? 'stock-out' : p.stock <= p.alert ? 'stock-low' : 'stock-ok';
     return `<tr onclick="openProdModal(${p.id})">
       <td><div class="td-name">
-        <span class="t-emoji">${p.emoji}</span>
+        ${p.thumbnail ? `<img src="${p.thumbnail}" style="width:32px;height:32px;object-fit:contain;border-radius:4px;flex-shrink:0">` : `<span class="t-emoji">${p.emoji}</span>`}
         <div><div class="t-nm">${p.name}</div><div class="t-bar">${p.barcode}</div></div>
       </div></td>
       <td><span class="td-cat">${p.cat}</span></td>
@@ -2142,6 +2150,17 @@ function openProdModal(id) {
     document.getElementById('prod-price').value = p.price;
     document.getElementById('prod-stock').value = p.stock;
     document.getElementById('prod-alert').value = p.alert;
+    // Pre-cargar miniatura existente
+    if (p.thumbnail) {
+      const parts = p.thumbnail.split(',');
+      currentMediaType = (parts[0].match(/:(.*?);/) || [])[1] || 'image/jpeg';
+      currentImageB64  = parts[1];
+      document.getElementById('photo-img').src = p.thumbnail;
+      document.getElementById('photo-preview').style.display = 'block';
+      document.getElementById('photo-zone').style.display = 'none';
+      document.getElementById('btn-rembg').style.display = 'block';
+      document.getElementById('analyze-status').textContent = 'Imagen actual del producto.';
+    }
   } else {
     ['prod-id','prod-emoji','prod-name','prod-barcode','prod-cat','prod-price','prod-stock','prod-alert']
       .forEach(f => document.getElementById(f).value = '');
@@ -2155,13 +2174,14 @@ function openProdModal(id) {
 async function saveProduct() {
   const id = parseInt(document.getElementById('prod-id').value);
   const data = {
-    emoji:   document.getElementById('prod-emoji').value || '📦',
-    name:    document.getElementById('prod-name').value.trim(),
-    barcode: document.getElementById('prod-barcode').value.trim(),
-    cat:     document.getElementById('prod-cat').value.trim() || 'General',
-    price:   parseFloat(document.getElementById('prod-price').value) || 0,
-    stock:   parseInt(document.getElementById('prod-stock').value) || 0,
-    alert:   parseInt(document.getElementById('prod-alert').value) || 5,
+    emoji:     document.getElementById('prod-emoji').value || '📦',
+    name:      document.getElementById('prod-name').value.trim(),
+    barcode:   document.getElementById('prod-barcode').value.trim(),
+    cat:       document.getElementById('prod-cat').value.trim() || 'General',
+    price:     parseFloat(document.getElementById('prod-price').value) || 0,
+    stock:     parseInt(document.getElementById('prod-stock').value) || 0,
+    alert:     parseInt(document.getElementById('prod-alert').value) || 5,
+    thumbnail: currentImageB64 ? `data:${currentMediaType};base64,${currentImageB64}` : null,
   };
   if (!data.name) { showToast('⚠ Ingresa un nombre'); return; }
   try {

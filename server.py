@@ -72,14 +72,15 @@ def init_db():
     conn = get_db()
     conn.executescript("""
         CREATE TABLE IF NOT EXISTS productos (
-            id      INTEGER PRIMARY KEY AUTOINCREMENT,
-            emoji   TEXT    DEFAULT '📦',
-            name    TEXT    NOT NULL,
-            barcode TEXT    DEFAULT '',
-            cat     TEXT    DEFAULT 'General',
-            price   REAL    DEFAULT 0,
-            stock   INTEGER DEFAULT 0,
-            alert   INTEGER DEFAULT 5
+            id        INTEGER PRIMARY KEY AUTOINCREMENT,
+            emoji     TEXT    DEFAULT '📦',
+            name      TEXT    NOT NULL,
+            barcode   TEXT    DEFAULT '',
+            cat       TEXT    DEFAULT 'General',
+            price     REAL    DEFAULT 0,
+            stock     INTEGER DEFAULT 0,
+            alert     INTEGER DEFAULT 5,
+            thumbnail TEXT    DEFAULT NULL
         );
         CREATE TABLE IF NOT EXISTS ventas (
             id         INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -98,6 +99,12 @@ def init_db():
             price       REAL
         );
     """)
+    # Migración: añadir thumbnail si no existe
+    try:
+        conn.execute("ALTER TABLE productos ADD COLUMN thumbnail TEXT DEFAULT NULL")
+        conn.commit()
+    except Exception:
+        pass  # ya existe
     if conn.execute("SELECT COUNT(*) FROM productos").fetchone()[0] == 0:
         conn.executemany(
             "INSERT INTO productos (emoji,name,barcode,cat,price,stock,alert) VALUES (?,?,?,?,?,?,?)",
@@ -228,10 +235,10 @@ class Handler(BaseHTTPRequestHandler):
             conn = get_db()
             c = conn.cursor()
             c.execute(
-                "INSERT INTO productos (emoji,name,barcode,cat,price,stock,alert) VALUES (?,?,?,?,?,?,?)",
+                "INSERT INTO productos (emoji,name,barcode,cat,price,stock,alert,thumbnail) VALUES (?,?,?,?,?,?,?,?)",
                 (body.get("emoji","📦"), body["name"], body.get("barcode",""),
                  body.get("cat","General"), body.get("price",0),
-                 body.get("stock",0), body.get("alert",5))
+                 body.get("stock",0), body.get("alert",5), body.get("thumbnail"))
             )
             row = conn.execute("SELECT * FROM productos WHERE id=?", (c.lastrowid,)).fetchone()
             conn.commit(); conn.close()
@@ -244,10 +251,10 @@ class Handler(BaseHTTPRequestHandler):
             body = self.read_json_body()
             conn = get_db()
             conn.execute(
-                "UPDATE productos SET emoji=?,name=?,barcode=?,cat=?,price=?,stock=?,alert=? WHERE id=?",
+                "UPDATE productos SET emoji=?,name=?,barcode=?,cat=?,price=?,stock=?,alert=?,thumbnail=? WHERE id=?",
                 (body.get("emoji","📦"), body["name"], body.get("barcode",""),
                  body.get("cat","General"), body.get("price",0),
-                 body.get("stock",0), body.get("alert",5), prod_id)
+                 body.get("stock",0), body.get("alert",5), body.get("thumbnail"), prod_id)
             )
             row = conn.execute("SELECT * FROM productos WHERE id=?", (prod_id,)).fetchone()
             conn.commit(); conn.close()
@@ -341,22 +348,34 @@ Responde SOLO el JSON."""
 
     # ── QUITAR FONDO ───────────────────────────────────────────────
     def _handle_remove_bg(self):
-        if not REMBG_AVAILABLE:
-            self.send_error_json("rembg no disponible en el servidor"); return
         try:
-            body   = self.read_json_body()
-            b64    = body.get("image", "")
+            body = self.read_json_body()
+            b64  = body.get("image", "")
             if not b64:
                 self.send_error_json("Falta el campo 'image'"); return
             img_bytes = base64.b64decode(b64)
-            print(f"  remove-bg: imagen {len(img_bytes)//1024}KB")
-            out_bytes = rembg_remove(img_bytes)
-            img = Image.open(io.BytesIO(out_bytes)).convert("RGBA")
+            print(f"  remove-bg: imagen {len(img_bytes)//1024}KB, rembg={'sí' if REMBG_AVAILABLE else 'no'}")
+
+            if REMBG_AVAILABLE:
+                try:
+                    out_bytes = rembg_remove(img_bytes)
+                    img = Image.open(io.BytesIO(out_bytes)).convert("RGBA")
+                    img.thumbnail((256, 256), Image.LANCZOS)
+                    buf = io.BytesIO()
+                    img.save(buf, format="PNG")
+                    result_b64 = base64.b64encode(buf.getvalue()).decode()
+                    self.send_json({"ok": True, "image": result_b64, "mediaType": "image/png", "method": "rembg"})
+                    return
+                except Exception as e:
+                    print(f"  rembg falló: {e} — usando recorte simple")
+
+            # Fallback: recortar y redimensionar sin quitar fondo
+            img = Image.open(io.BytesIO(img_bytes)).convert("RGB")
             img.thumbnail((256, 256), Image.LANCZOS)
             buf = io.BytesIO()
-            img.save(buf, format="PNG")
+            img.save(buf, format="JPEG", quality=85)
             result_b64 = base64.b64encode(buf.getvalue()).decode()
-            self.send_json({"ok": True, "image": result_b64, "mediaType": "image/png"})
+            self.send_json({"ok": True, "image": result_b64, "mediaType": "image/jpeg", "method": "crop"})
         except Exception as e:
             import traceback; traceback.print_exc()
             self.send_error_json(f"Error: {e}", 500)
