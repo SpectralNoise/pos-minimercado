@@ -317,6 +317,8 @@ nav#topnav {
 }
 .prod-card .prod-stock.low { color: var(--warn); font-weight: 600; }
 .prod-card .prod-stock.out-txt { color: var(--danger); font-weight: 600; }
+/* prod-info-col: en desktop es transparente (el flex-col del card maneja el layout) */
+.prod-card .prod-info-col { display: contents; }
 .prod-card::after {
   content: '+'; position: absolute; inset: 0;
   display: flex; align-items: center; justify-content: center;
@@ -914,7 +916,7 @@ table.inv-table {
   .caja-info { display: none; }
 
   /* COBRO — columna: productos arriba, carrito abajo */
-  #screen-cobro { flex-direction: column; }
+  #screen-cobro { flex-direction: column; overflow: hidden; }
   .cobro-left {
     border-right: none;
     border-bottom: 1px solid var(--border);
@@ -922,24 +924,37 @@ table.inv-table {
     display: flex; flex-direction: column;
   }
   .cobro-right {
-    width: 100%; max-height: none;
+    width: 100%;
+    max-height: 52vh;   /* carrito no ocupa más de la mitad */
     flex-shrink: 0;
     border-left: none;
     border-top: 2px solid var(--border);
+    overflow-y: auto;
   }
-  .search-bar { padding: 10px 12px; gap: 8px; }
-  .search-wrap { height: 44px; padding: 0 12px; }
+  .search-bar { padding: 8px 12px; gap: 8px; }
+  .search-wrap { height: 42px; padding: 0 10px; }
   .scan-indicator { display: none; }
-  .cat-pills { padding: 8px 12px; gap: 5px; }
+  .cat-pills { padding: 6px 12px; gap: 5px; }
   .pill { padding: 4px 11px; font-size: 12px; }
   .products-grid {
-    grid-template-columns: repeat(auto-fill, minmax(110px, 1fr));
-    gap: 8px; padding: 10px 12px;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 8px; padding: 8px 12px;
   }
-  .prod-card { padding: 10px 10px 9px; }
-  .prod-card .prod-emoji { font-size: 22px; }
-  .prod-card .prod-name { font-size: 14px; }
-  .prod-card .prod-price { font-size: 15px; }
+  .prod-card {
+    padding: 10px 10px 9px;
+    display: flex; flex-direction: row; align-items: center; gap: 8px;
+  }
+  .prod-card .prod-emoji { font-size: 24px; flex-shrink: 0; margin-bottom: 0; }
+  .prod-card .prod-info-col {
+    display: flex; flex-direction: column; gap: 1px; flex: 1; min-width: 0;
+  }
+  .prod-card .prod-name {
+    font-size: 13px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  }
+  .prod-card .prod-price {
+    font-size: 14px; margin-top: 0; padding-top: 0; border-top: none;
+  }
+  .prod-card .prod-stock { font-size: 10px; }
 
   /* CARRITO */
   .cart-header { padding: 11px 14px; }
@@ -1527,9 +1542,11 @@ function renderProducts() {
     const stockTxt = p.stock === 0 ? 'Sin stock' : `Stock: ${p.stock}`;
     return `<div class="prod-card ${p.stock===0?'out':''}" onclick="addToCart(${p.id})">
       <div class="prod-emoji">${p.emoji}</div>
-      <div class="prod-name">${p.name}</div>
-      <div class="prod-price">${fmt(p.price)}</div>
-      <div class="prod-stock ${stockClass}">${stockTxt}</div>
+      <div class="prod-info-col">
+        <div class="prod-name">${p.name}</div>
+        <div class="prod-price">${fmt(p.price)}</div>
+        <div class="prod-stock ${stockClass}">${stockTxt}</div>
+      </div>
     </div>`;
   }).join('');
 }
