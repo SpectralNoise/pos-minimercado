@@ -28,8 +28,10 @@ try:
     from rembg import remove as rembg_remove
     from PIL import Image
     REMBG_AVAILABLE = True
-except ImportError:
+    print("✅ rembg disponible")
+except Exception as _rembg_err:
     REMBG_AVAILABLE = False
+    print(f"⚠  rembg no disponible: {_rembg_err}")
 
 ANTHROPIC_API_KEY = os.environ.get("ANTHROPIC_API_KEY", "")
 BASE_DIR = Path(__file__).parent
@@ -340,17 +342,15 @@ Responde SOLO el JSON."""
     # ── QUITAR FONDO ───────────────────────────────────────────────
     def _handle_remove_bg(self):
         if not REMBG_AVAILABLE:
-            self.send_error_json("rembg no instalado. Corre: pip3 install rembg Pillow"); return
+            self.send_error_json("rembg no disponible en el servidor"); return
         try:
             body   = self.read_json_body()
             b64    = body.get("image", "")
             if not b64:
                 self.send_error_json("Falta el campo 'image'"); return
-            # Decodificar imagen
             img_bytes = base64.b64decode(b64)
-            # Quitar fondo
+            print(f"  remove-bg: imagen {len(img_bytes)//1024}KB")
             out_bytes = rembg_remove(img_bytes)
-            # Redimensionar a 256×256 con fondo transparente (PNG)
             img = Image.open(io.BytesIO(out_bytes)).convert("RGBA")
             img.thumbnail((256, 256), Image.LANCZOS)
             buf = io.BytesIO()
@@ -358,7 +358,8 @@ Responde SOLO el JSON."""
             result_b64 = base64.b64encode(buf.getvalue()).decode()
             self.send_json({"ok": True, "image": result_b64, "mediaType": "image/png"})
         except Exception as e:
-            self.send_error_json(str(e), 500)
+            import traceback; traceback.print_exc()
+            self.send_error_json(f"Error: {e}", 500)
 
 
 # ─── INICIO ────────────────────────────────────────────────────────
