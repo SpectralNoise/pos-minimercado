@@ -2004,18 +2004,31 @@ let currentMediaType = 'image/jpeg';
 function onPhotoSelected(event) {
   const file = event.target.files[0];
   if (!file) return;
-  currentMediaType = file.type || 'image/jpeg';
+  currentMediaType = 'image/jpeg';
 
   const reader = new FileReader();
   reader.onload = e => {
-    const dataUrl = e.target.result;
-    // Separar base64 puro del prefijo data:...;base64,
-    currentImageB64 = dataUrl.split(',')[1];
-    document.getElementById('photo-img').src = dataUrl;
-    document.getElementById('photo-preview').style.display = 'block';
-    document.getElementById('photo-zone').style.display = 'none';
-    document.getElementById('btn-rembg').style.display = 'block';
-    document.getElementById('analyze-status').textContent = 'Imagen lista. Pulsa "Analizar con IA" para extraer los datos.';
+    const img = new Image();
+    img.onload = () => {
+      // Redimensionar a máximo 1024px para no saturar la red
+      const MAX = 1024;
+      let w = img.width, h = img.height;
+      if (w > MAX || h > MAX) {
+        if (w > h) { h = Math.round(h * MAX / w); w = MAX; }
+        else       { w = Math.round(w * MAX / h); h = MAX; }
+      }
+      const canvas = document.createElement('canvas');
+      canvas.width = w; canvas.height = h;
+      canvas.getContext('2d').drawImage(img, 0, 0, w, h);
+      const dataUrl = canvas.toDataURL('image/jpeg', 0.75);
+      currentImageB64 = dataUrl.split(',')[1];
+      document.getElementById('photo-img').src = dataUrl;
+      document.getElementById('photo-preview').style.display = 'block';
+      document.getElementById('photo-zone').style.display = 'none';
+      document.getElementById('btn-rembg').style.display = 'block';
+      document.getElementById('analyze-status').textContent = 'Imagen lista. Pulsa "Analizar con IA" para extraer los datos.';
+    };
+    img.src = e.target.result;
   };
   reader.readAsDataURL(file);
 }

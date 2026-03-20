@@ -129,7 +129,13 @@ class Handler(BaseHTTPRequestHandler):
 
     def read_json_body(self):
         length = int(self.headers.get("Content-Length", 0))
-        return json.loads(self.rfile.read(length))
+        data = b""
+        while len(data) < length:
+            chunk = self.rfile.read(length - len(data))
+            if not chunk:
+                break
+            data += chunk
+        return json.loads(data)
 
     def do_OPTIONS(self):
         self.send_response(200)
