@@ -41,6 +41,12 @@ except Exception:
 
 USE_TURSO = _LIBSQL_OK and bool(TURSO_URL) and bool(TURSO_TOKEN)
 
+# Advertir si las vars están pero la librería no cargó
+if (TURSO_URL or TURSO_TOKEN) and not _LIBSQL_OK:
+    print("⚠  TURSO_URL/TOKEN están configuradas pero libsql_experimental no cargó — usando SQLite local")
+if not TURSO_URL and not TURSO_TOKEN:
+    print("ℹ  Sin TURSO_URL/TOKEN — usando SQLite local (datos se pierden en cada deploy de Railway)")
+
 class _DCursor:
     """Cursor wrapper que devuelve dicts en lugar de tuplas."""
     def __init__(self, cur):
@@ -220,6 +226,8 @@ class Handler(BaseHTTPRequestHandler):
         path = self.path.split("?")[0]
         if path in ("/", "/index.html"):
             self._serve_file(BASE_DIR / "index.html", "text/html")
+        elif path == "/api/status":
+            self._json({"db": "turso" if USE_TURSO else "sqlite", "turso_url": bool(TURSO_URL), "libsql_ok": _LIBSQL_OK})
         elif path == "/api/productos":
             conn = get_db()
             try:
