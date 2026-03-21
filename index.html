@@ -1236,7 +1236,7 @@ table.inv-table {
       </div>
       <div class="recibido-wrap" id="recibido-wrap">
         <div class="pay-label">Recibido</div>
-        <input type="number" class="input-money" id="recibido-input" placeholder="0" oninput="calcCambio()">
+        <input type="text" inputmode="numeric" class="input-money" id="recibido-input" placeholder="0" oninput="fmtInput(this);calcCambio()">
         <div class="cambio-row">
           <span class="lbl">Cambio</span>
           <span class="val" id="cambio-val">$0</span>
@@ -1311,7 +1311,7 @@ table.inv-table {
       <div class="form-row">
         <div class="form-group">
           <label>Precio venta ($)</label>
-          <input type="number" class="form-input mono" id="prod-price" placeholder="0">
+          <input type="text" inputmode="numeric" class="form-input mono" id="prod-price" placeholder="0" oninput="fmtInput(this)">
         </div>
         <div class="form-group">
           <label>Stock actual</label>
@@ -1347,7 +1347,7 @@ table.inv-table {
       </div>
 
       <div class="pay-label">Efectivo inicial en caja</div>
-      <input type="number" class="input-money" id="apertura-monto" placeholder="0" style="margin-bottom:8px">
+      <input type="text" inputmode="numeric" class="input-money" id="apertura-monto" placeholder="0" oninput="fmtInput(this)" style="margin-bottom:8px">
       <div style="font-size:12px;color:var(--text-3);margin-bottom:20px">Cuenta el efectivo que hay en la caja antes de empezar.</div>
 
       <button class="btn-cobrar" onclick="abrirCaja()" style="background:var(--success)">✅ Abrir Caja</button>
@@ -1389,7 +1389,7 @@ table.inv-table {
 
       <div style="margin-top:12px">
         <div class="pay-label">Efectivo contado ahora</div>
-        <input type="number" class="input-money" id="cierre-contado" placeholder="0" oninput="calcDiferencia()" style="margin-top:6px">
+        <input type="text" inputmode="numeric" class="input-money" id="cierre-contado" placeholder="0" oninput="fmtInput(this);calcDiferencia()" style="margin-top:6px">
       </div>
       <div id="diferencia-box" class="diferencia-box ok" style="margin-top:12px;display:none">
         <span class="dif-lbl" id="dif-lbl">Cuadre perfecto</span>
@@ -1508,6 +1508,22 @@ const fmt = n => '$' + Math.round(n).toLocaleString('es-CO');
 
 const _esc = {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'};
 const esc = s => String(s ?? '').replace(/[&<>"']/g, c => _esc[c]);
+
+// Formatea un input de dinero mientras el usuario escribe (ej: 10000 → 10.000)
+function fmtInput(el) {
+  const raw = el.value.replace(/\D/g, '');
+  el.value = raw ? parseInt(raw, 10).toLocaleString('es-CO') : '';
+}
+// Lee el valor numérico de un input formateado
+function parseMoney(id) {
+  const val = document.getElementById(id).value.replace(/\./g, '').replace(',', '.');
+  return parseFloat(val) || 0;
+}
+// Asigna un valor numérico a un input y lo formatea
+function setMoney(id, val) {
+  const el = document.getElementById(id);
+  el.value = val ? Math.round(val).toLocaleString('es-CO') : '';
+}
 
 function showToast(msg, duration=2200) {
   const t = document.getElementById('toast');
@@ -1831,7 +1847,7 @@ async function lookupFillModal(barcode) {
 function _applyMeliPrice(ps) {
   if (!ps) return;
   const priceEl = document.getElementById('prod-price');
-  if (!priceEl.value || priceEl.value === '0') priceEl.value = ps.medio;
+  if (!priceEl.value || priceEl.value === '0') setMoney('prod-price', ps.medio);
   let hint = document.getElementById('meli-price-hint');
   if (!hint) {
     hint = document.createElement('div');
@@ -1964,7 +1980,7 @@ function updatePayModal() {
 
 function calcCambio() {
   const total = cart.reduce((s,i) => s+i.price*i.qty, 0);
-  const recibido = parseFloat(document.getElementById('recibido-input').value) || 0;
+  const recibido = parseMoney('recibido-input');
   const cambio = recibido - total;
   document.getElementById('cambio-val').textContent = cambio >= 0 ? fmt(cambio) : fmt(0);
   document.getElementById('btn-cobrar').disabled = cambio < 0;
@@ -1973,7 +1989,7 @@ function calcCambio() {
 async function completarVenta() {
   const total = cart.reduce((s,i) => s+i.price*i.qty, 0);
   const recibido = currentPayMethod === 'efectivo'
-    ? parseFloat(document.getElementById('recibido-input').value) || 0
+    ? parseMoney('recibido-input')
     : total;
 
   try {
@@ -2336,7 +2352,7 @@ function openProdModal(id) {
     document.getElementById('prod-name').value = p.name;
     document.getElementById('prod-barcode').value = p.barcode;
     document.getElementById('prod-cat').value = p.cat;
-    document.getElementById('prod-price').value = p.price;
+    setMoney('prod-price', p.price);
     document.getElementById('prod-stock').value = p.stock;
     document.getElementById('prod-alert').value = p.alert;
     // Pre-cargar miniatura existente (via URL, sin traer el base64)
@@ -2364,7 +2380,7 @@ async function saveProduct() {
     name:      document.getElementById('prod-name').value.trim(),
     barcode:   document.getElementById('prod-barcode').value.trim(),
     cat:       document.getElementById('prod-cat').value.trim() || 'General',
-    price:     parseFloat(document.getElementById('prod-price').value) || 0,
+    price:     parseMoney('prod-price'),
     stock:     parseInt(document.getElementById('prod-stock').value) || 0,
     alert:     parseInt(document.getElementById('prod-alert').value) || 5,
     ...(thumbnailChanged ? { thumbnail: currentImageB64 ? `data:${currentMediaType};base64,${currentImageB64}` : null } : {}),
@@ -2527,7 +2543,7 @@ function openModal(id) { document.getElementById(id).classList.add('open'); }
 
 function abrirCaja() {
   const cajero = document.getElementById('apertura-cajero').value.trim();
-  const monto  = parseFloat(document.getElementById('apertura-monto').value) || 0;
+  const monto  = parseMoney('apertura-monto');
   if (!cajero) { showToast('⚠ Ingresa el nombre del cajero'); return; }
 
   cajaSession = { cajero, inicio: new Date(), montoInicial: monto, ventasIds: [] };
@@ -2612,7 +2628,7 @@ function calcDiferencia() {
   const sesVentas = sales.filter(s => cajaSession.ventasIds.includes(s.id));
   const efectivo  = sesVentas.filter(s=>s.method==='efectivo').reduce((a,s)=>a+s.total,0);
   const esperado  = cajaSession.montoInicial + efectivo;
-  const contado   = parseFloat(document.getElementById('cierre-contado').value) || 0;
+  const contado   = parseMoney('cierre-contado');
   const dif       = contado - esperado;
 
   const box   = document.getElementById('diferencia-box');
@@ -2625,7 +2641,7 @@ function calcDiferencia() {
 }
 
 function cerrarCaja() {
-  const contado = parseFloat(document.getElementById('cierre-contado').value);
+  const contado = parseMoney('cierre-contado');
   if (isNaN(contado)) { showToast('⚠ Ingresa el efectivo contado'); return; }
   cajaSession = null;
   updateCajaBar();
