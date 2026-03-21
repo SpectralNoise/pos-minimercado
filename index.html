@@ -2745,7 +2745,7 @@ async function abrirCaja() {
       await fetch(`/api/turnos/${t.id}/cierre`, {
         method: 'PUT',
         headers: {'Content-Type':'application/json'},
-        body: JSON.stringify({efectivo_ventas:0,transferencias:0,total_ventas:0,num_tx:0,monto_contado:null,diferencia:null})
+        body: JSON.stringify({efectivo_ventas:0,transferencias:0,total_ventas:0,num_tx:0,monto_contado:null,diferencia:null,resumen_ia:null})
       });
       return abrirCaja();
     }
