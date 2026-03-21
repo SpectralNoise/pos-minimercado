@@ -165,10 +165,33 @@ def init_db():
             qty         INTEGER,
             price       REAL
         );
+        CREATE TABLE IF NOT EXISTS turnos (
+            id               INTEGER PRIMARY KEY AUTOINCREMENT,
+            caja_id          TEXT     DEFAULT 'caja-1',
+            cajero           TEXT     NOT NULL,
+            estado           TEXT     DEFAULT 'abierto',
+            monto_inicial    REAL     DEFAULT 0,
+            apertura_at      DATETIME DEFAULT CURRENT_TIMESTAMP,
+            cierre_at        DATETIME DEFAULT NULL,
+            efectivo_ventas  REAL     DEFAULT 0,
+            transferencias   REAL     DEFAULT 0,
+            total_ventas     REAL     DEFAULT 0,
+            monto_contado    REAL     DEFAULT NULL,
+            diferencia       REAL     DEFAULT NULL,
+            num_tx           INTEGER  DEFAULT 0,
+            resumen_ia       TEXT     DEFAULT NULL
+        );
     """)
     # Migración: añadir thumbnail si no existe
     try:
         conn.execute("ALTER TABLE productos ADD COLUMN thumbnail TEXT DEFAULT NULL")
+        conn.commit()
+    except (sqlite3.OperationalError, ValueError) as e:
+        if "duplicate column name" not in str(e):
+            raise
+    # Migración: añadir turno_id en ventas si no existe
+    try:
+        conn.execute("ALTER TABLE ventas ADD COLUMN turno_id INTEGER REFERENCES turnos(id)")
         conn.commit()
     except (sqlite3.OperationalError, ValueError) as e:
         if "duplicate column name" not in str(e):
