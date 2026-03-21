@@ -1214,6 +1214,27 @@ table.inv-table {
         <div class="kpi-sub" id="kpi-tr-pct">0% del total</div>
       </div>
     </div>
+    <!-- Historial de turnos — solo admin -->
+    <section id="turnos-section" style="display:none; padding:0 24px 32px;">
+      <h3 style="font-family:var(--ff-disp);font-size:14px;font-weight:700;letter-spacing:.07em;text-transform:uppercase;color:var(--text-2);margin-bottom:12px;">Historial de Turnos</h3>
+      <div style="overflow-x:auto;">
+        <table id="turnos-table" style="width:100%;border-collapse:collapse;font-size:14px;">
+          <thead>
+            <tr style="border-bottom:2px solid var(--border);text-align:left;">
+              <th style="padding:8px 12px;color:var(--text-2);font-weight:600;">Fecha</th>
+              <th style="padding:8px 12px;color:var(--text-2);font-weight:600;">Cajero</th>
+              <th style="padding:8px 12px;color:var(--text-2);font-weight:600;">Caja</th>
+              <th style="padding:8px 12px;color:var(--text-2);font-weight:600;">Duración</th>
+              <th style="padding:8px 12px;color:var(--text-2);font-weight:600;text-align:right;">Tx</th>
+              <th style="padding:8px 12px;color:var(--text-2);font-weight:600;text-align:right;">Total</th>
+              <th style="padding:8px 12px;color:var(--text-2);font-weight:600;text-align:right;">Diferencia</th>
+              <th style="padding:8px 12px;color:var(--text-2);font-weight:600;">Estado</th>
+            </tr>
+          </thead>
+          <tbody id="turnos-tbody"></tbody>
+        </table>
+      </div>
+    </section>
     <div class="rep-body">
       <div class="rep-transactions">
         <div class="tx-header">
@@ -1494,6 +1515,7 @@ let sales = [];
 function normalizarVenta(v) {
   return {
     id:       v.id,
+    turno_id: v.turno_id ?? null,
     total:    v.total,
     method:   v.metodo,
     recibido: v.recibido ?? v.total,
@@ -1505,12 +1527,24 @@ function normalizarVenta(v) {
 
 async function loadData() {
   try {
-    const [pRes, vRes] = await Promise.all([
+    const [pRes, vRes, tRes] = await Promise.all([
       fetch('/api/productos'),
-      fetch('/api/ventas')
+      fetch('/api/ventas'),
+      fetch('/api/turnos/activo')
     ]);
     products = await pRes.json();
     sales    = (await vRes.json()).map(normalizarVenta);
+    const turnoActivo = await tRes.json();
+
+    if (turnoActivo && turnoActivo.id) {
+      cajaSession = {
+        id:           turnoActivo.id,
+        cajero:       turnoActivo.cajero,
+        inicio:       new Date(turnoActivo.apertura_at.replace(' ','T')),
+        montoInicial: turnoActivo.monto_inicial,
+        ventasIds:    sales.filter(s => s.turno_id === turnoActivo.id).map(s => s.id)
+      };
+    }
   } catch (err) {
     showToast('⚠ Error cargando datos del servidor');
   }
@@ -2013,6 +2047,7 @@ async function completarVenta() {
         total,
         metodo: currentPayMethod,
         recibido,
+        turno_id: cajaSession?.id ?? null,
         items: cart.map(i => ({ id: i.id, name: i.name, emoji: i.emoji, qty: i.qty, price: i.price }))
       })
     });
@@ -2025,6 +2060,7 @@ async function completarVenta() {
 
     lastSale = {
       id:       data.venta.id,
+      turno_id: cajaSession?.id ?? null,
       items:    cart.map(i => ({ name: i.name, emoji: i.emoji, qty: i.qty, price: i.price })),
       total,
       method:   currentPayMethod,
@@ -2599,6 +2635,56 @@ function renderReportes() {
       </div>
     </div>`;
   }).join('') : '<div style="color:var(--text-3);font-size:13px">Sin datos</div>';
+
+  renderTurnos();
+}
+
+async function renderTurnos() {
+  const section = document.getElementById('turnos-section');
+  if (currentMode !== 'admin') { section.style.display = 'none'; return; }
+
+  try {
+    const res = await fetch('/api/turnos');
+    const turnos = await res.json();
+    section.style.display = '';
+
+    const tbody = document.getElementById('turnos-tbody');
+    if (!turnos.length) {
+      tbody.innerHTML = '<tr><td colspan="8" style="padding:20px;text-align:center;color:var(--text-2)">Sin turnos registrados</td></tr>';
+      return;
+    }
+
+    tbody.innerHTML = turnos.map(t => {
+      const apertura = new Date(t.apertura_at.replace(' ','T'));
+      const cierre   = t.cierre_at ? new Date(t.cierre_at.replace(' ','T')) : new Date();
+      const durMs    = cierre - apertura;
+      const durH     = Math.floor(durMs / 3600000);
+      const durM     = Math.floor((durMs % 3600000) / 60000);
+      const fecha    = apertura.toLocaleDateString('es-CO', {day:'2-digit',month:'2-digit'});
+
+      let difStr = '—', difColor = 'var(--text-2)';
+      if (t.diferencia !== null && t.diferencia !== undefined) {
+        difStr  = (t.diferencia >= 0 ? '+' : '') + fmt(Math.abs(t.diferencia));
+        difColor = t.diferencia < 0 ? '#ef4444' : '#22c55e';
+      }
+      const estado = t.estado === 'abierto'
+        ? '<span style="color:#22c55e">🟢 Abierto</span>'
+        : '<span style="color:var(--text-2)">✅ Cerrado</span>';
+
+      return `<tr style="border-bottom:1px solid var(--border);">
+        <td style="padding:10px 12px;">${fecha}</td>
+        <td style="padding:10px 12px;">${esc(t.cajero)}</td>
+        <td style="padding:10px 12px;color:var(--text-2);font-size:12px;">${esc(t.caja_id)}</td>
+        <td style="padding:10px 12px;color:var(--text-2);">${durH}h ${durM}m</td>
+        <td style="padding:10px 12px;text-align:right;">${t.num_tx}</td>
+        <td style="padding:10px 12px;text-align:right;font-family:var(--ff-mono);">${fmt(t.total_ventas)}</td>
+        <td style="padding:10px 12px;text-align:right;font-family:var(--ff-mono);color:${difColor};">${difStr}</td>
+        <td style="padding:10px 12px;">${estado}</td>
+      </tr>`;
+    }).join('');
+  } catch (e) {
+    console.error('Error cargando turnos:', e);
+  }
 }
 
 function viewSale(id) {
@@ -2635,15 +2721,50 @@ let cajaSession = null; // { cajero, inicio, montoInicial, ventasIds[] }
 
 function openModal(id) { document.getElementById(id).classList.add('open'); }
 
-function abrirCaja() {
+async function abrirCaja() {
   const cajero = document.getElementById('apertura-cajero').value.trim();
   const monto  = parseMoney('apertura-monto');
   if (!cajero) { showToast('⚠ Ingresa el nombre del cajero'); return; }
 
-  cajaSession = { cajero, inicio: new Date(), montoInicial: monto, ventasIds: [] };
-  updateCajaBar();
-  closeModal('modal-apertura');
-  showToast(`✅ Caja abierta — ${cajero}`);
+  try {
+    const res = await fetch('/api/turnos', {
+      method: 'POST',
+      headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({ cajero, monto_inicial: monto })
+    });
+    const data = await res.json();
+
+    if (res.status === 409) {
+      const t = data.turno_activo;
+      const fecha = new Date(t.apertura_at.replace(' ','T'))
+        .toLocaleDateString('es-CO', {day:'2-digit',month:'2-digit'});
+      const confirmar = confirm(
+        `Hay un turno de "${t.cajero}" sin cerrar desde ${fecha}.\n¿Cerrarlo automáticamente y abrir uno nuevo?`
+      );
+      if (!confirmar) return;
+      await fetch(`/api/turnos/${t.id}/cierre`, {
+        method: 'PUT',
+        headers: {'Content-Type':'application/json'},
+        body: JSON.stringify({efectivo_ventas:0,transferencias:0,total_ventas:0,num_tx:0,monto_contado:null,diferencia:null})
+      });
+      return abrirCaja();
+    }
+
+    if (!res.ok) { showToast('⚠ Error al abrir caja: ' + data.error); return; }
+
+    cajaSession = {
+      id: data.id,
+      cajero: data.cajero,
+      inicio: new Date(data.apertura_at.replace(' ','T')),
+      montoInicial: data.monto_inicial,
+      ventasIds: []
+    };
+    updateCajaBar();
+    closeModal('modal-apertura');
+    showToast(`✅ Caja abierta — ${cajero}`);
+  } catch (err) {
+    showToast('⚠ Error al abrir caja');
+  }
 }
 
 function updateCajaBar() {
@@ -2734,9 +2855,41 @@ function calcDiferencia() {
   val.textContent = (dif >= 0 ? '+' : '') + fmt(Math.abs(dif));
 }
 
-function cerrarCaja() {
+async function cerrarCaja() {
   const contado = parseMoney('cierre-contado');
-  if (isNaN(contado)) { showToast('⚠ Ingresa el efectivo contado'); return; }
+  if (document.getElementById('cierre-contado').value === '') {
+    showToast('⚠ Ingresa el efectivo contado'); return;
+  }
+
+  const sesVentas      = sales.filter(s => cajaSession.ventasIds.includes(s.id));
+  const efectivo       = sesVentas.filter(s=>s.method==='efectivo').reduce((a,s)=>a+s.total,0);
+  const transferencias = sesVentas.filter(s=>s.method==='transferencia').reduce((a,s)=>a+s.total,0);
+  const total_ventas   = efectivo + transferencias;
+  const esperado       = cajaSession.montoInicial + efectivo;
+  const diferencia     = contado - esperado;
+
+  const iaTexto = document.getElementById('cierre-ia-texto');
+  const resumen_ia = (iaTexto && iaTexto.textContent && !iaTexto.textContent.startsWith('⏳'))
+    ? iaTexto.textContent : null;
+
+  try {
+    await fetch(`/api/turnos/${cajaSession.id}/cierre`, {
+      method: 'PUT',
+      headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({
+        efectivo_ventas: efectivo,
+        transferencias,
+        total_ventas,
+        num_tx: sesVentas.length,
+        monto_contado: contado,
+        diferencia,
+        resumen_ia
+      })
+    });
+  } catch (e) {
+    console.warn('No se pudo guardar el cierre en DB:', e);
+  }
+
   cajaSession = null;
   updateCajaBar();
   closeModal('modal-cierre');
