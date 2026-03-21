@@ -61,7 +61,13 @@ class _DCursor:
     def _row(self, row):
         if row is None: return None
         cols = self._cols()
-        return {cols[i]: row[i] for i in range(len(cols))} if cols else row
+        if not cols: return row
+        # _Row soporta row["col"] y row[0] para compatibilidad con sqlite3.Row
+        class _Row(dict):
+            def __getitem__(self, key):
+                if isinstance(key, int): return list(self.values())[key]
+                return super().__getitem__(key)
+        return _Row({cols[i]: row[i] for i in range(len(cols))})
 
     def execute(self, sql, params=()):
         self._c.execute(sql, params)
