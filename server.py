@@ -296,6 +296,10 @@ class Handler(BaseHTTPRequestHandler):
         elif path.startswith("/api/lookup-barcode/"):
             barcode = path.split("/api/lookup-barcode/")[1]
             self._lookup_barcode(barcode)
+        elif path == "/api/turnos/activo":
+            self._get_turno_activo()
+        elif path == "/api/turnos":
+            self._list_turnos()
         elif path == "/api/ventas":
             conn = get_db()
             try:
@@ -599,6 +603,32 @@ Al final, un consejo breve sobre los productos sin rotación."""
             self.send_error_json(str(e), 500)
 
     # ── TURNOS ─────────────────────────────────────────────────────
+    def _get_turno_activo(self):
+        try:
+            conn = get_db()
+            try:
+                row = conn.execute(
+                    "SELECT * FROM turnos WHERE estado='abierto' ORDER BY apertura_at DESC LIMIT 1"
+                ).fetchone()
+                self.send_json(row_to_dict(row) if row else None)
+            finally:
+                conn.close()
+        except Exception as e:
+            self.send_error_json(str(e), 500)
+
+    def _list_turnos(self):
+        try:
+            conn = get_db()
+            try:
+                rows = conn.execute(
+                    "SELECT * FROM turnos ORDER BY apertura_at DESC LIMIT 120"
+                ).fetchall()
+                self.send_json([row_to_dict(r) for r in rows])
+            finally:
+                conn.close()
+        except Exception as e:
+            self.send_error_json(str(e), 500)
+
     def _open_turno(self):
         try:
             body = self.read_json_body()
