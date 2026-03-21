@@ -162,10 +162,45 @@ class Handler(BaseHTTPRequestHandler):
         elif path == "/api/productos":
             conn = get_db()
             try:
-                rows = conn.execute("SELECT * FROM productos ORDER BY name").fetchall()
+                rows = conn.execute(
+                    "SELECT id,emoji,name,barcode,cat,price,stock,alert,"
+                    "(thumbnail IS NOT NULL AND thumbnail != '') AS has_thumbnail "
+                    "FROM productos ORDER BY name"
+                ).fetchall()
                 self.send_json([row_to_dict(r) for r in rows])
             finally:
                 conn.close()
+        elif path.startswith("/api/productos/") and path.endswith("/thumbnail"):
+            parts = path.split("/")
+            if len(parts) == 5:
+                prod_id = parts[3]
+                conn = get_db()
+                try:
+                    row = conn.execute(
+                        "SELECT thumbnail FROM productos WHERE id=?", (prod_id,)
+                    ).fetchone()
+                finally:
+                    conn.close()
+                if row and row["thumbnail"]:
+                    thumb = row["thumbnail"]
+                    # thumbnail almacenado como "data:image/jpeg;base64,..."
+                    if thumb.startswith("data:"):
+                        header, b64data = thumb.split(",", 1)
+                        mime = header.split(":")[1].split(";")[0]
+                        img_bytes = base64.b64decode(b64data)
+                    else:
+                        mime = "image/jpeg"
+                        img_bytes = base64.b64decode(thumb)
+                    self.send_response(200)
+                    self.send_header("Content-Type", mime)
+                    self.send_header("Content-Length", len(img_bytes))
+                    self.send_header("Cache-Control", "public, max-age=86400")
+                    self.end_headers()
+                    self.wfile.write(img_bytes)
+                else:
+                    self.send_response(404); self.end_headers()
+            else:
+                self.send_response(404); self.end_headers()
         elif path.startswith("/api/lookup-barcode/"):
             barcode = path.split("/api/lookup-barcode/")[1]
             self._lookup_barcode(barcode)
@@ -254,7 +289,11 @@ class Handler(BaseHTTPRequestHandler):
                  body.get("cat","General"), body.get("price",0),
                  body.get("stock",0), body.get("alert",5), body.get("thumbnail"))
             )
-            row = conn.execute("SELECT * FROM productos WHERE id=?", (c.lastrowid,)).fetchone()
+            row = conn.execute(
+                "SELECT id,emoji,name,barcode,cat,price,stock,alert,"
+                "(thumbnail IS NOT NULL AND thumbnail != '') AS has_thumbnail "
+                "FROM productos WHERE id=?", (c.lastrowid,)
+            ).fetchone()
             conn.commit(); conn.close()
             self.send_json(row_to_dict(row), 201)
         except Exception as e:
@@ -264,13 +303,26 @@ class Handler(BaseHTTPRequestHandler):
         try:
             body = self.read_json_body()
             conn = get_db()
-            conn.execute(
-                "UPDATE productos SET emoji=?,name=?,barcode=?,cat=?,price=?,stock=?,alert=?,thumbnail=? WHERE id=?",
-                (body.get("emoji","📦"), body["name"], body.get("barcode",""),
-                 body.get("cat","General"), body.get("price",0),
-                 body.get("stock",0), body.get("alert",5), body.get("thumbnail"), prod_id)
-            )
-            row = conn.execute("SELECT * FROM productos WHERE id=?", (prod_id,)).fetchone()
+            if "thumbnail" in body:
+                conn.execute(
+                    "UPDATE productos SET emoji=?,name=?,barcode=?,cat=?,price=?,stock=?,alert=?,thumbnail=? WHERE id=?",
+                    (body.get("emoji","📦"), body["name"], body.get("barcode",""),
+                     body.get("cat","General"), body.get("price",0),
+                     body.get("stock",0), body.get("alert",5), body.get("thumbnail"), prod_id)
+                )
+            else:
+                conn.execute(
+                    "UPDATE productos SET emoji=?,name=?,barcode=?,cat=?,price=?,stock=?,alert=? WHERE id=?",
+                    (body.get("emoji","📦"), body["name"], body.get("barcode",""),
+                     body.get("cat","General"), body.get("price",0),
+                     body.get("stock",0), body.get("alert",5), prod_id)
+                )
+            # Devolver has_thumbnail en vez del blob
+            row = conn.execute(
+                "SELECT id,emoji,name,barcode,cat,price,stock,alert,"
+                "(thumbnail IS NOT NULL AND thumbnail != '') AS has_thumbnail "
+                "FROM productos WHERE id=?", (prod_id,)
+            ).fetchone()
             conn.commit(); conn.close()
             self.send_json(row_to_dict(row) if row else {}, 200 if row else 404)
         except Exception as e:

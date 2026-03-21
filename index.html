@@ -1484,6 +1484,9 @@ async function loadData() {
 // ─── UTILS ────────────────────────────────────
 const fmt = n => '$' + Math.round(n).toLocaleString('es-CO');
 
+const _esc = {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'};
+const esc = s => String(s ?? '').replace(/[&<>"']/g, c => _esc[c]);
+
 function showToast(msg, duration=2200) {
   const t = document.getElementById('toast');
   t.textContent = msg;
@@ -1546,13 +1549,13 @@ function renderProducts() {
   grid.innerHTML = filtered.map(p => {
     const stockClass = p.stock === 0 ? 'out-txt' : p.stock <= p.alert ? 'low' : '';
     const stockTxt = p.stock === 0 ? 'Sin stock' : `Stock: ${p.stock}`;
-    const thumb = p.thumbnail
-      ? `<img src="${p.thumbnail}" class="prod-thumb" alt="">`
-      : `<div class="prod-emoji">${p.emoji}</div>`;
+    const thumb = p.has_thumbnail
+      ? `<img src="/api/productos/${p.id}/thumbnail" class="prod-thumb" alt="">`
+      : `<div class="prod-emoji">${esc(p.emoji)}</div>`;
     return `<div class="prod-card ${p.stock===0?'out':''}" onclick="addToCart(${p.id})">
       ${thumb}
       <div class="prod-info-col">
-        <div class="prod-name">${p.name}</div>
+        <div class="prod-name">${esc(p.name)}</div>
         <div class="prod-price">${fmt(p.price)}</div>
         <div class="prod-stock ${stockClass}">${stockTxt}</div>
       </div>
@@ -1752,6 +1755,7 @@ async function lookupAndOffer(barcode) {
         const parts = p.thumbnail.split(',');
         currentMediaType = (parts[0].match(/:(.*?);/) || [])[1] || 'image/jpeg';
         currentImageB64  = parts[1];
+        thumbnailChanged = true;
         document.getElementById('photo-img').src = p.thumbnail;
         document.getElementById('photo-preview').style.display = 'block';
         document.getElementById('photo-zone').style.display    = 'none';
@@ -1787,6 +1791,7 @@ async function lookupFillModal(barcode) {
       const parts = p.thumbnail.split(',');
       currentMediaType = (parts[0].match(/:(.*?);/) || [])[1] || 'image/jpeg';
       currentImageB64  = parts[1];
+      thumbnailChanged = true;
       document.getElementById('photo-img').src = p.thumbnail;
       document.getElementById('photo-preview').style.display = 'block';
       document.getElementById('photo-zone').style.display    = 'none';
@@ -1894,9 +1899,9 @@ function renderCart() {
   }
   container.innerHTML = cart.map(item => `
     <div class="cart-item">
-      <div class="ci-emoji">${item.emoji}</div>
+      <div class="ci-emoji">${esc(item.emoji)}</div>
       <div class="ci-info">
-        <div class="ci-name">${item.name}</div>
+        <div class="ci-name">${esc(item.name)}</div>
         <div class="ci-price">${fmt(item.price)} / u</div>
       </div>
       <div class="ci-qty">
@@ -2011,7 +2016,7 @@ function showRecibo() {
     <div class="receipt-items">
       ${s.items.map(i=>`
         <div class="ri-row">
-          <span class="ri-name">${i.name}</span>
+          <span class="ri-name">${esc(i.name)}</span>
           <span class="ri-qty">×${i.qty}</span>
           <span class="ri-total">${fmt(i.price*i.qty)}</span>
         </div>`).join('')}
@@ -2069,10 +2074,10 @@ function renderInventario() {
     const sc = p.stock === 0 ? 'stock-out' : p.stock <= p.alert ? 'stock-low' : 'stock-ok';
     return `<tr onclick="openProdModal(${p.id})">
       <td><div class="td-name">
-        ${p.thumbnail ? `<img src="${p.thumbnail}" style="width:32px;height:32px;object-fit:contain;border-radius:4px;flex-shrink:0">` : `<span class="t-emoji">${p.emoji}</span>`}
-        <div><div class="t-nm">${p.name}</div><div class="t-bar">${p.barcode}</div></div>
+        ${p.has_thumbnail ? `<img src="/api/productos/${p.id}/thumbnail" style="width:32px;height:32px;object-fit:contain;border-radius:4px;flex-shrink:0">` : `<span class="t-emoji">${esc(p.emoji)}</span>`}
+        <div><div class="t-nm">${esc(p.name)}</div><div class="t-bar">${esc(p.barcode)}</div></div>
       </div></td>
-      <td><span class="td-cat">${p.cat}</span></td>
+      <td><span class="td-cat">${esc(p.cat)}</span></td>
       <td class="right"><span class="td-price">${fmt(p.price)}</span></td>
       <td class="right"><span class="stock-badge ${sc}">${p.stock}</span></td>
       <td class="right" style="color:var(--text-2);font-family:var(--ff-mono);font-size:13px">${p.alert}</td>
@@ -2116,6 +2121,7 @@ function onBarcodeKey(e) {
 // ─── FOTO + IA ────────────────────────────────
 let currentImageB64 = null;
 let currentMediaType = 'image/jpeg';
+let thumbnailChanged = false;
 
 function onPhotoSelected(event) {
   const file = event.target.files[0];
@@ -2138,6 +2144,7 @@ function onPhotoSelected(event) {
       canvas.getContext('2d').drawImage(img, 0, 0, w, h);
       const dataUrl = canvas.toDataURL('image/jpeg', 0.75);
       currentImageB64 = dataUrl.split(',')[1];
+      thumbnailChanged = true;
       document.getElementById('photo-img').src = dataUrl;
       document.getElementById('photo-preview').style.display = 'block';
       document.getElementById('photo-zone').style.display = 'none';
@@ -2201,6 +2208,7 @@ async function removeBg() {
     // Reemplazar imagen actual con la versión sin fondo
     currentImageB64  = data.image;
     currentMediaType = data.mediaType;
+    thumbnailChanged = true;
     document.getElementById('photo-img').src = `data:${data.mediaType};base64,${data.image}`;
     status.textContent = '✅ Fondo eliminado';
     showToast('🪄 Fondo eliminado correctamente');
@@ -2216,6 +2224,7 @@ async function removeBg() {
 function resetPhotoZone() {
   currentImageB64  = null;
   currentMediaType = 'image/jpeg';
+  thumbnailChanged = false;
   const hint = document.getElementById('meli-price-hint');
   if (hint) hint.remove();
   document.getElementById('photo-input').value = '';
@@ -2243,16 +2252,14 @@ function openProdModal(id) {
     document.getElementById('prod-price').value = p.price;
     document.getElementById('prod-stock').value = p.stock;
     document.getElementById('prod-alert').value = p.alert;
-    // Pre-cargar miniatura existente
-    if (p.thumbnail) {
-      const parts = p.thumbnail.split(',');
-      currentMediaType = (parts[0].match(/:(.*?);/) || [])[1] || 'image/jpeg';
-      currentImageB64  = parts[1];
-      document.getElementById('photo-img').src = p.thumbnail;
+    // Pre-cargar miniatura existente (via URL, sin traer el base64)
+    if (p.has_thumbnail) {
+      document.getElementById('photo-img').src = `/api/productos/${p.id}/thumbnail`;
       document.getElementById('photo-preview').style.display = 'block';
       document.getElementById('photo-zone').style.display = 'none';
       document.getElementById('btn-rembg').style.display = 'block';
       document.getElementById('analyze-status').textContent = 'Imagen actual del producto.';
+      thumbnailChanged = false; // no enviar thumbnail al guardar salvo que cambie
     }
   } else {
     ['prod-id','prod-emoji','prod-name','prod-barcode','prod-cat','prod-price','prod-stock','prod-alert']
@@ -2274,7 +2281,7 @@ async function saveProduct() {
     price:     parseFloat(document.getElementById('prod-price').value) || 0,
     stock:     parseInt(document.getElementById('prod-stock').value) || 0,
     alert:     parseInt(document.getElementById('prod-alert').value) || 5,
-    thumbnail: currentImageB64 ? `data:${currentMediaType};base64,${currentImageB64}` : null,
+    ...(thumbnailChanged ? { thumbnail: currentImageB64 ? `data:${currentMediaType};base64,${currentImageB64}` : null } : {}),
   };
   if (!data.name) { showToast('⚠ Ingresa un nombre'); return; }
   try {
@@ -2369,7 +2376,7 @@ function renderReportes() {
       <div class="tx-item" onclick="viewSale(${s.id})">
         <div class="tx-num">#${s.id}</div>
         <div class="tx-info">
-          <div class="tx-items-txt">${s.items.slice(0,2).map(i=>i.name).join(', ')}${s.items.length>2?` +${s.items.length-2} más`:''}</div>
+          <div class="tx-items-txt">${s.items.slice(0,2).map(i=>esc(i.name)).join(', ')}${s.items.length>2?` +${s.items.length-2} más`:''}</div>
           <div class="tx-time">${s.date.toLocaleTimeString('es-CO',{hour:'2-digit',minute:'2-digit'})} · ${s.items.reduce((a,i)=>a+i.qty,0)} ítem${s.items.reduce((a,i)=>a+i.qty,0)!==1?'s':''}</div>
         </div>
         <span class="tx-method ${s.method}">${s.method==='efectivo'?'💵 Efectivo':'📲 Transfer.'}</span>
@@ -2388,9 +2395,9 @@ function renderReportes() {
     const prod = products.find(p=>p.name===name);
     return `<div class="top-product">
       <div class="tp-rank">#${i+1}</div>
-      <div class="tp-emoji">${prod?.emoji||'📦'}</div>
+      <div class="tp-emoji">${esc(prod?.emoji||'📦')}</div>
       <div class="tp-info">
-        <div class="tp-name">${name}</div>
+        <div class="tp-name">${esc(name)}</div>
         <div class="tp-sold">${qty} vendidos</div>
         <div class="tp-bar-wrap"><div class="tp-bar" style="width:${Math.round(qty/maxQty*100)}%"></div></div>
       </div>
