@@ -1544,6 +1544,7 @@ async function loadData() {
         montoInicial: turnoActivo.monto_inicial,
         ventasIds:    sales.filter(s => s.turno_id === turnoActivo.id).map(s => s.id)
       };
+      updateCajaBar();
     }
   } catch (err) {
     showToast('⚠ Error cargando datos del servidor');
@@ -2742,11 +2743,12 @@ async function abrirCaja() {
         `Hay un turno de "${t.cajero}" sin cerrar desde ${fecha}.\n¿Cerrarlo automáticamente y abrir uno nuevo?`
       );
       if (!confirmar) return;
-      await fetch(`/api/turnos/${t.id}/cierre`, {
+      const cierreRes = await fetch(`/api/turnos/${t.id}/cierre`, {
         method: 'PUT',
         headers: {'Content-Type':'application/json'},
         body: JSON.stringify({efectivo_ventas:0,transferencias:0,total_ventas:0,num_tx:0,monto_contado:null,diferencia:null,resumen_ia:null})
       });
+      if (!cierreRes.ok) { showToast('⚠ No se pudo cerrar el turno anterior'); return; }
       return abrirCaja();
     }
 
