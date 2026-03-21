@@ -352,6 +352,8 @@ class Handler(BaseHTTPRequestHandler):
             self._handle_ai_cierre()
         elif self.path == "/api/ai-pedido":
             self._handle_ai_pedido()
+        elif self.path == "/api/turnos":
+            self._open_turno()
         else:
             self.send_error_json("Ruta no encontrada", 404)
 
@@ -593,6 +595,33 @@ Al final, un consejo breve sobre los productos sin rotación."""
                 messages=[{"role": "user", "content": prompt}]
             )
             self.send_json({"ok": True, "pedido": msg.content[0].text.strip()})
+        except Exception as e:
+            self.send_error_json(str(e), 500)
+
+    # ── TURNOS ─────────────────────────────────────────────────────
+    def _open_turno(self):
+        try:
+            body = self.read_json_body()
+            cajero = body.get("cajero", "").strip()
+            if not cajero:
+                self.send_error_json("Falta el nombre del cajero"); return
+            conn = get_db()
+            # Verificar si ya existe un turno abierto
+            activo = conn.execute(
+                "SELECT * FROM turnos WHERE estado='abierto' ORDER BY apertura_at DESC LIMIT 1"
+            ).fetchone()
+            if activo:
+                conn.close()
+                self.send_json({"error": "Ya existe un turno abierto", "turno_activo": row_to_dict(activo)}, 409)
+                return
+            c = conn.cursor()
+            c.execute(
+                "INSERT INTO turnos (cajero, monto_inicial, caja_id) VALUES (?,?,?)",
+                (cajero, body.get("monto_inicial", 0), body.get("caja_id", "caja-1"))
+            )
+            turno = conn.execute("SELECT * FROM turnos WHERE id=?", (c.lastrowid,)).fetchone()
+            conn.commit(); conn.close()
+            self.send_json(row_to_dict(turno), 201)
         except Exception as e:
             self.send_error_json(str(e), 500)
 
