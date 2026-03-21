@@ -1027,6 +1027,18 @@ table.inv-table {
   /* TOAST */
   .toast { bottom: 16px; font-size: 13px; max-width: calc(100vw - 32px); white-space: normal; text-align: center; }
 }
+
+/* ── IMPRESIÓN TÉRMICA ─────────────────────────────────────── */
+@media print {
+  /* Ocultar todo excepto el recibo */
+  body > * { display: none !important; }
+  #modal-recibo { display: block !important; position: static !important; background: none !important; padding: 0 !important; }
+  #modal-recibo .modal { box-shadow: none !important; border: none !important; max-width: 100% !important; margin: 0 !important; padding: 0 !important; }
+  #modal-recibo .modal-header { display: none !important; }
+  #modal-recibo .receipt-actions { display: none !important; }
+  #modal-recibo .btn-nueva-venta { display: none !important; }
+  .receipt { padding: 0 !important; font-size: 12px !important; }
+}
 </style>
 </head>
 <body>
@@ -2068,14 +2080,83 @@ function showRecibo() {
 
 function printReceipt() { window.print(); showToast('🖨 Enviando a impresora...'); }
 
-function sendWhatsApp() {
+async function sendWhatsApp() {
   const s = lastSale;
-  let msg = `🛒 *Recibo Mini Mercado*\n📋 #${s.id}\n`;
-  msg += `━━━━━━━━━━━━━━━━\n`;
-  s.items.forEach(i => { msg += `• ${i.name} ×${i.qty} — ${fmt(i.price*i.qty)}\n`; });
-  msg += `━━━━━━━━━━━━━━━━\n*TOTAL: ${fmt(s.total)}*\n¡Gracias por su compra! 🙂`;
-  const url = `https://wa.me/?text=${encodeURIComponent(msg)}`;
-  window.open(url, '_blank');
+
+  // Generar imagen del recibo con Canvas
+  const W = 400, PAD = 24, LINE = 22;
+  const now = new Date();
+  const fecha = now.toLocaleDateString('es-CO', {day:'2-digit',month:'2-digit',year:'numeric'});
+  const hora  = now.toLocaleTimeString('es-CO', {hour:'2-digit',minute:'2-digit'});
+
+  // Calcular alto dinámico
+  const rows = s.items.length;
+  const extraLines = s.method === 'efectivo' ? 2 : 1;
+  const H = PAD*2 + LINE*4 + 10 + LINE*(rows+1) + 10 + LINE*(2+extraLines) + LINE*2 + PAD;
+
+  const canvas = document.createElement('canvas');
+  canvas.width  = W * 2; // retina
+  canvas.height = H * 2;
+  const ctx = canvas.getContext('2d');
+  ctx.scale(2, 2);
+
+  // Fondo blanco
+  ctx.fillStyle = '#fff';
+  ctx.fillRect(0, 0, W, H);
+  ctx.fillStyle = '#111';
+
+  let y = PAD;
+  const center = txt => { ctx.textAlign = 'center'; ctx.fillText(txt, W/2, y); y += LINE; };
+  const left   = txt => { ctx.textAlign = 'left';   ctx.fillText(txt, PAD, y); };
+  const right  = txt => { ctx.textAlign = 'right';  ctx.fillText(txt, W-PAD, y); };
+  const divider= () => { ctx.fillStyle='#ccc'; ctx.fillRect(PAD,y-6,W-PAD*2,1); ctx.fillStyle='#111'; y+=4; };
+
+  // Cabecera
+  ctx.font = 'bold 18px monospace'; center('Mini Mercado');
+  ctx.font = '13px monospace';      center('Recibo de Venta');
+  ctx.font = '12px monospace';      center(`#${s.id}  ·  ${fecha} ${hora}`);
+  y += 6; divider();
+
+  // Items
+  ctx.font = '13px monospace';
+  s.items.forEach(i => {
+    left(`${i.qty}x ${i.name.substring(0,22)}`);
+    right(fmt(i.price * i.qty));
+    y += LINE;
+  });
+  y += 4; divider();
+
+  // Totales
+  ctx.font = 'bold 15px monospace';
+  left('TOTAL'); right(fmt(s.total)); y += LINE;
+
+  ctx.font = '12px monospace';
+  if (s.method === 'efectivo') {
+    left('Recibido'); right(fmt(s.recibido)); y += LINE;
+    left('Cambio');   right(fmt(s.cambio));   y += LINE;
+  } else {
+    left('Transferencia'); right('Confirmado'); y += LINE;
+  }
+  y += 8; divider();
+  ctx.font = '12px monospace';
+  center('¡Gracias por su compra!'); center('Vuelva pronto 🙂');
+
+  // Intentar Web Share API (funciona en móvil como imagen)
+  canvas.toBlob(async blob => {
+    const file = new File([blob], `recibo-${s.id}.png`, { type: 'image/png' });
+    if (navigator.canShare && navigator.canShare({ files: [file] })) {
+      try {
+        await navigator.share({ files: [file], title: `Recibo #${s.id}` });
+        return;
+      } catch(e) { /* cancelado o no soportado */ }
+    }
+    // Fallback: descargar la imagen
+    const a = document.createElement('a');
+    a.href = canvas.toDataURL('image/png');
+    a.download = `recibo-${s.id}.png`;
+    a.click();
+    showToast('📥 Imagen descargada — compártela por WhatsApp');
+  }, 'image/png');
 }
 
 function nuevaVenta() {
