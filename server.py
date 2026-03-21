@@ -366,6 +366,8 @@ class Handler(BaseHTTPRequestHandler):
         parts = self.path.split("/")
         if len(parts) == 4 and parts[2] == "productos":
             self._update_producto(parts[3])
+        elif len(parts) == 5 and parts[2] == "turnos" and parts[4] == "cierre":
+            self._close_turno(int(parts[3]))
         else:
             self.send_error_json("Ruta no encontrada", 404)
 
@@ -652,6 +654,40 @@ Al final, un consejo breve sobre los productos sin rotación."""
                 turno = conn.execute("SELECT * FROM turnos WHERE id=?", (c.lastrowid,)).fetchone()
                 conn.commit()
                 self.send_json(row_to_dict(turno), 201)
+            finally:
+                conn.close()
+        except Exception as e:
+            self.send_error_json(str(e), 500)
+
+    def _close_turno(self, turno_id):
+        try:
+            body = self.read_json_body()
+            conn = get_db()
+            try:
+                conn.execute(
+                    """UPDATE turnos SET
+                        estado='cerrado',
+                        cierre_at=CURRENT_TIMESTAMP,
+                        efectivo_ventas=?,
+                        transferencias=?,
+                        total_ventas=?,
+                        num_tx=?,
+                        monto_contado=?,
+                        diferencia=?,
+                        resumen_ia=?
+                       WHERE id=? AND estado='abierto'""",
+                    (body.get("efectivo_ventas", 0),
+                     body.get("transferencias", 0),
+                     body.get("total_ventas", 0),
+                     body.get("num_tx", 0),
+                     body.get("monto_contado"),
+                     body.get("diferencia"),
+                     body.get("resumen_ia"),
+                     turno_id)
+                )
+                turno = conn.execute("SELECT * FROM turnos WHERE id=?", (turno_id,)).fetchone()
+                conn.commit()
+                self.send_json(row_to_dict(turno) if turno else {})
             finally:
                 conn.close()
         except Exception as e:
