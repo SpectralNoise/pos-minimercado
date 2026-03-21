@@ -4,7 +4,7 @@ POS Mini Mercado - Servidor local
 Puerto 5051 · Sirve index.html, REST API SQLite, y endpoints de IA
 """
 
-import os, json, mimetypes, ssl, sqlite3, base64, io, urllib.request, urllib.error
+import os, json, mimetypes, ssl, sqlite3, base64, io, urllib.request, urllib.error, socketserver
 from http.server import HTTPServer, BaseHTTPRequestHandler
 from pathlib import Path
 
@@ -103,8 +103,9 @@ def init_db():
     try:
         conn.execute("ALTER TABLE productos ADD COLUMN thumbnail TEXT DEFAULT NULL")
         conn.commit()
-    except Exception:
-        pass  # ya existe
+    except sqlite3.OperationalError as e:
+        if "duplicate column name" not in str(e):
+            raise
     if conn.execute("SELECT COUNT(*) FROM productos").fetchone()[0] == 0:
         conn.executemany(
             "INSERT INTO productos (emoji,name,barcode,cat,price,stock,alert) VALUES (?,?,?,?,?,?,?)",
@@ -160,29 +161,39 @@ class Handler(BaseHTTPRequestHandler):
             self._serve_file(BASE_DIR / "index.html", "text/html")
         elif path == "/api/productos":
             conn = get_db()
-            rows = conn.execute("SELECT * FROM productos ORDER BY name").fetchall()
-            conn.close()
-            self.send_json([row_to_dict(r) for r in rows])
+            try:
+                rows = conn.execute("SELECT * FROM productos ORDER BY name").fetchall()
+                self.send_json([row_to_dict(r) for r in rows])
+            finally:
+                conn.close()
         elif path.startswith("/api/lookup-barcode/"):
             barcode = path.split("/api/lookup-barcode/")[1]
             self._lookup_barcode(barcode)
         elif path == "/api/ventas":
             conn = get_db()
-            ventas = conn.execute(
-                "SELECT * FROM ventas ORDER BY created_at DESC LIMIT 500"
-            ).fetchall()
-            result = []
-            for v in ventas:
-                vd = row_to_dict(v)
-                items = conn.execute(
-                    "SELECT * FROM items_venta WHERE venta_id=?", (v["id"],)
+            try:
+                ventas = conn.execute(
+                    "SELECT * FROM ventas ORDER BY created_at DESC LIMIT 500"
                 ).fetchall()
-                vd["items"] = [row_to_dict(i) for i in items]
-                result.append(vd)
-            conn.close()
-            self.send_json(result)
+                result = []
+                for v in ventas:
+                    vd = row_to_dict(v)
+                    items = conn.execute(
+                        "SELECT * FROM items_venta WHERE venta_id=?", (v["id"],)
+                    ).fetchall()
+                    vd["items"] = [row_to_dict(i) for i in items]
+                    result.append(vd)
+                self.send_json(result)
+            finally:
+                conn.close()
         else:
-            file_path = BASE_DIR / path.lstrip("/")
+            file_path = (BASE_DIR / path.lstrip("/")).resolve()
+            # Bloquear path traversal y archivos sensibles
+            if not str(file_path).startswith(str(BASE_DIR.resolve())):
+                self.send_response(403); self.end_headers(); return
+            BLOCKED = {"pos.db", ".env", "key.pem", "cert.pem", "rootCA.pem"}
+            if file_path.name in BLOCKED:
+                self.send_response(403); self.end_headers(); return
             if file_path.exists() and file_path.is_file():
                 mime, _ = mimetypes.guess_type(str(file_path))
                 self._serve_file(file_path, mime or "application/octet-stream")
@@ -555,7 +566,10 @@ if __name__ == "__main__":
   ║  IA: {'✅ Configurada' if ANTHROPIC_API_KEY else '⚠  Falta ANTHROPIC_API_KEY'}{'                 ' if ANTHROPIC_API_KEY else '        '}║
   ╚══════════════════════════════════════════╝
 """)
-    server = HTTPServer(("0.0.0.0", port), Handler)
+    class ThreadingHTTPServer(socketserver.ThreadingMixIn, HTTPServer):
+        daemon_threads = True
+
+    server = ThreadingHTTPServer(("0.0.0.0", port), Handler)
     if https:
         ctx = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
         ctx.load_cert_chain(str(cert), str(key))
