@@ -165,7 +165,7 @@ def init_db():
     try:
         conn.execute("ALTER TABLE productos ADD COLUMN thumbnail TEXT DEFAULT NULL")
         conn.commit()
-    except sqlite3.OperationalError as e:
+    except (sqlite3.OperationalError, ValueError) as e:
         if "duplicate column name" not in str(e):
             raise
     if conn.execute("SELECT COUNT(*) FROM productos").fetchone()[0] == 0:
