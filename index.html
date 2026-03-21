@@ -1014,14 +1014,11 @@ table.inv-table {
   .btn-cobrar { height: 52px; font-size: 18px; }
   /* MODAL PRODUCTO — móvil */
   .prod-form { padding: 14px 16px; gap: 10px; overflow-y: auto; }
-  .form-actions { padding: 0 16px 16px; flex-direction: column; gap: 8px; }
-  .form-actions .btn-cancel { display: none; }  /* Usar X del header en móvil */
-  .form-actions .btn-save { width: 100%; }
-  /* Filas multi-col → columna única */
+  .form-actions { padding: 0 16px 20px; }
+  .form-actions .btn-cancel { display: none; }
+  .form-actions .btn-save { flex: 1; height: 52px; font-size: 17px; }
+  /* Filas multi-col → columna única en móvil */
   .form-row { flex-direction: column; gap: 10px; }
-  /* Excepto emoji+nombre: emoji queda pequeño arriba */
-  .form-row.row-emoji { flex-direction: row; gap: 10px; }
-  .form-row.row-emoji .form-group:first-child { flex: 0 0 58px; }
   .receipt { padding: 18px; }
   .receipt-actions { grid-template-columns: 1fr 1fr; padding: 0 18px 18px; gap: 8px; }
   .btn-nueva-venta { width: calc(100% - 36px); margin: 0 18px 18px; height: 50px; font-size: 16px; }
@@ -1288,15 +1285,10 @@ table.inv-table {
         <button id="btn-rembg" onclick="removeBg()" style="display:none;width:100%;margin-top:6px;padding:8px;border-radius:8px;border:1px solid var(--border);background:var(--surf-2);color:var(--text-2);font-family:var(--ff-disp);font-size:13px;font-weight:700;cursor:pointer;letter-spacing:.5px;">🪄 QUITAR FONDO</button>
       </div>
 
-      <div class="form-row row-emoji">
-        <div class="form-group" style="flex:0 0 64px">
-          <label>Emoji</label>
-          <input type="text" class="form-input" id="prod-emoji" maxlength="2" placeholder="🧃">
-        </div>
-        <div class="form-group">
-          <label>Nombre del producto</label>
-          <input type="text" class="form-input" id="prod-name" placeholder="Ej: Arroz 500g">
-        </div>
+      <input type="hidden" id="prod-emoji" value="📦">
+      <div class="form-group">
+        <label>Nombre del producto</label>
+        <input type="text" class="form-input" id="prod-name" placeholder="Ej: Arroz 500g">
       </div>
       <div class="form-group">
         <label>Código de barras</label>
