@@ -2092,10 +2092,13 @@ async function sendWhatsApp() {
 
   // Calcular alto dinámico
   const extraLines = s.method === 'efectivo' ? 2 : 1;
-  const H = PAD + 26 + LH + LHsm + 16        // cabecera
-          + 10 + s.items.length * LH + 12      // items
-          + LH + extraLines * LHsm + 12        // totales
-          + LHsm * 2 + PAD;                    // pie
+  // H = suma exacta de todos los y+= del recibo
+  const H = PAD + 26 + LH + LHsm + 20              // cabecera + div
+          + s.items.length * LH + 10 + LH           // items + div (y+=10, div, y+=LH)
+          + LH + 2 + extraLines * LHsm              // totales
+          + 12 + LH                                 // div totales (y+=12, div, y+=LH)
+          + LHsm + 2                                // ¡Gracias! (posiciona Vuelva pronto)
+          + PAD;                                    // margen inferior
 
   const canvas = document.createElement('canvas');
   canvas.width  = W * 2;
@@ -2134,7 +2137,7 @@ async function sendWhatsApp() {
     row(`${i.qty}x  ${i.name.substring(0,24)}`, fmt(i.price * i.qty), '13px monospace');
     y += LH;
   });
-  y += 8; div(); y += 10;
+  y += 10; div(); y += LH;
 
   // ── Totales ─────────────────────────────────
   row('TOTAL', fmt(s.total), 'bold 15px monospace', 'bold 15px monospace'); y += LH + 2;
@@ -2145,7 +2148,7 @@ async function sendWhatsApp() {
   } else {
     row('Transferencia', 'Confirmado ✓', '12px monospace', '', '#555'); y += LHsm;
   }
-  y += 12; div(); y += 12;
+  y += 12; div(); y += LH;
 
   // ── Pie ─────────────────────────────────────
   center('¡Gracias por su compra!', '12px monospace', '#333'); y += LHsm + 2;
