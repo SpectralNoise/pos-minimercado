@@ -689,7 +689,9 @@ Al final, un consejo breve sobre los productos sin rotación."""
                 )
                 turno = conn.execute("SELECT * FROM turnos WHERE id=?", (turno_id,)).fetchone()
                 conn.commit()
-                self.send_json(row_to_dict(turno) if turno else {})
+                if not turno or turno["estado"] != "cerrado":
+                    self.send_error_json("Turno no encontrado o ya cerrado", 409); return
+                self.send_json(row_to_dict(turno))
             finally:
                 conn.close()
         except Exception as e:
