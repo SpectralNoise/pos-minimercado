@@ -35,7 +35,10 @@ except Exception as _rembg_err:
 
 ANTHROPIC_API_KEY = os.environ.get("ANTHROPIC_API_KEY", "")
 BASE_DIR = Path(__file__).parent
-DB_PATH  = BASE_DIR / "pos.db"
+# En cloud usar /data (Railway Volume); en local usar el directorio del proyecto
+_data_dir = Path(os.environ.get("DATA_DIR", "/data" if os.environ.get("RAILWAY_ENVIRONMENT") else str(BASE_DIR)))
+_data_dir.mkdir(parents=True, exist_ok=True)
+DB_PATH = _data_dir / "pos.db"
 
 PRODUCTOS_INICIALES = [
     ('🍚', 'Arroz 500g',         '7702001001001', 'Granos',      2100,  48, 10),
