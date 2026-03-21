@@ -1274,7 +1274,7 @@ table.inv-table {
         <div class="photo-zone" id="photo-zone" onclick="document.getElementById('photo-input').click()">
           <span class="ph-icon">📷</span>
           <span class="ph-label">Foto del producto</span>
-          <span class="ph-sub">Toca para abrir cámara o elegir imagen — la IA extrae los datos</span>
+          <span class="ph-sub">Toca para abrir cámara — detecta código de barras automáticamente</span>
           <input type="file" id="photo-input" accept="image/*" capture="environment" style="display:none" onchange="onPhotoSelected(event)">
         </div>
         <div class="photo-preview" id="photo-preview">
@@ -2131,8 +2131,8 @@ function onPhotoSelected(event) {
   const reader = new FileReader();
   reader.onload = e => {
     const img = new Image();
-    img.onload = () => {
-      // Redimensionar a máximo 1024px para no saturar la red
+    img.onload = async () => {
+      // Redimensionar a máximo 1024px
       const MAX = 1024;
       let w = img.width, h = img.height;
       if (w > MAX || h > MAX) {
@@ -2149,7 +2149,31 @@ function onPhotoSelected(event) {
       document.getElementById('photo-preview').style.display = 'block';
       document.getElementById('photo-zone').style.display = 'none';
       document.getElementById('btn-rembg').style.display = 'block';
-      document.getElementById('analyze-status').textContent = 'Imagen lista. Pulsa "Analizar con IA" para extraer los datos.';
+
+      const status = document.getElementById('analyze-status');
+      const btn    = document.getElementById('btn-analyze');
+
+      // 1. Intentar leer código de barras de la imagen (gratis, sin IA)
+      if ('BarcodeDetector' in window) {
+        try {
+          status.textContent = '🔍 Buscando código de barras en la imagen...';
+          btn.disabled = true;
+          const detector = new BarcodeDetector({ formats: ['ean_13','ean_8','upc_a','upc_e','code_128','code_39','itf','qr_code','data_matrix'] });
+          const barcodes  = await detector.detect(canvas);
+          if (barcodes.length > 0) {
+            const code = barcodes[0].rawValue;
+            status.textContent = `📦 Código detectado: ${code} — buscando en base de datos...`;
+            document.getElementById('prod-barcode').value = code;
+            await lookupFillModal(code);
+            btn.disabled = false;
+            return; // listo, no necesitamos IA
+          }
+        } catch (_) { /* BarcodeDetector falló, seguir con IA */ }
+      }
+
+      // 2. No se encontró código → ofrecer análisis con IA
+      btn.disabled = false;
+      status.textContent = 'No se detectó código de barras. Pulsa "Analizar con IA" para extraer los datos.';
     };
     img.src = e.target.result;
   };
