@@ -80,8 +80,7 @@ class _DCursor:
 class _TursoConn:
     """Conexión Turso compatible con la API de sqlite3 que usa el servidor."""
     def __init__(self):
-        url = TURSO_URL.replace('libsql://', '')
-        self._conn = _libsql.connect(url, auth_token=TURSO_TOKEN)
+        self._conn = _libsql.connect(TURSO_URL, auth_token=TURSO_TOKEN)
 
     def cursor(self):
         return _DCursor(self._conn.cursor())
