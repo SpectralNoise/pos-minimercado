@@ -24,14 +24,7 @@ except ImportError:
     AI_AVAILABLE = False
     print("⚠  anthropic no instalado. Corre: pip3 install anthropic")
 
-try:
-    from rembg import remove as rembg_remove
-    from PIL import Image
-    REMBG_AVAILABLE = True
-    print("✅ rembg disponible")
-except Exception as _rembg_err:
-    REMBG_AVAILABLE = False
-    print(f"⚠  rembg no disponible: {_rembg_err}")
+from PIL import Image
 
 ANTHROPIC_API_KEY = os.environ.get("ANTHROPIC_API_KEY", "")
 TURSO_URL         = os.environ.get("TURSO_URL", "")
@@ -324,8 +317,8 @@ class Handler(BaseHTTPRequestHandler):
             self._create_venta()
         elif self.path == "/analyze-product":
             self._handle_analyze_product()
-        elif self.path == "/remove-bg":
-            self._handle_remove_bg()
+        elif self.path == "/api/ai-cierre":
+            self._handle_ai_cierre()
         else:
             self.send_error_json("Ruta no encontrada", 404)
 
@@ -480,39 +473,45 @@ Responde SOLO el JSON."""
         except Exception as e:
             self.send_error_json(str(e), 500)
 
-    # ── QUITAR FONDO ───────────────────────────────────────────────
-    def _handle_remove_bg(self):
+    # ── RESUMEN IA DE CIERRE DE CAJA ───────────────────────────────
+    def _handle_ai_cierre(self):
+        if not AI_AVAILABLE or not ANTHROPIC_API_KEY:
+            self.send_error_json("IA no configurada"); return
         try:
             body = self.read_json_body()
-            b64  = body.get("image", "")
-            if not b64:
-                self.send_error_json("Falta el campo 'image'"); return
-            img_bytes = base64.b64decode(b64)
-            print(f"  remove-bg: imagen {len(img_bytes)//1024}KB, rembg={'sí' if REMBG_AVAILABLE else 'no'}")
+            cajero   = body.get("cajero", "el cajero")
+            duracion = body.get("duracion_min", 0)
+            total    = body.get("total", 0)
+            efectivo = body.get("efectivo", 0)
+            transf   = body.get("transf", 0)
+            tx       = body.get("tx_count", 0)
+            top      = body.get("top_productos", [])
 
-            if REMBG_AVAILABLE:
-                try:
-                    out_bytes = rembg_remove(img_bytes)
-                    img = Image.open(io.BytesIO(out_bytes)).convert("RGBA")
-                    img.thumbnail((256, 256), Image.LANCZOS)
-                    buf = io.BytesIO()
-                    img.save(buf, format="PNG")
-                    result_b64 = base64.b64encode(buf.getvalue()).decode()
-                    self.send_json({"ok": True, "image": result_b64, "mediaType": "image/png", "method": "rembg"})
-                    return
-                except Exception as e:
-                    print(f"  rembg falló: {e} — usando recorte simple")
+            horas = duracion // 60
+            mins  = duracion % 60
+            dur_txt = f"{horas}h {mins}min" if horas else f"{mins} minutos"
+            top_txt = ", ".join([f"{p['name']} ({p['qty']} uds)" for p in top[:5]]) or "sin datos"
 
-            # Fallback: recortar y redimensionar sin quitar fondo
-            img = Image.open(io.BytesIO(img_bytes)).convert("RGB")
-            img.thumbnail((256, 256), Image.LANCZOS)
-            buf = io.BytesIO()
-            img.save(buf, format="JPEG", quality=85)
-            result_b64 = base64.b64encode(buf.getvalue()).decode()
-            self.send_json({"ok": True, "image": result_b64, "mediaType": "image/jpeg", "method": "crop"})
+            prompt = f"""Eres el asistente del sistema POS de un mini mercado colombiano.
+Genera un resumen breve y amigable del turno en máximo 3 oraciones, en español colombiano informal.
+Datos del turno:
+- Cajero: {cajero}
+- Duración: {dur_txt}
+- Transacciones: {tx}
+- Total vendido: ${int(total):,} COP
+- Efectivo: ${int(efectivo):,} | Transferencias: ${int(transf):,}
+- Productos más vendidos: {top_txt}
+Sé positivo, menciona el nombre del cajero, y destaca algo interesante de los números."""
+
+            client = anthropic.Anthropic(api_key=ANTHROPIC_API_KEY)
+            msg = client.messages.create(
+                model="claude-haiku-4-5-20251001",
+                max_tokens=200,
+                messages=[{"role": "user", "content": prompt}]
+            )
+            self.send_json({"ok": True, "resumen": msg.content[0].text.strip()})
         except Exception as e:
-            import traceback; traceback.print_exc()
-            self.send_error_json(f"Error: {e}", 500)
+            self.send_error_json(str(e), 500)
 
 
     # ── LOOKUP BARCODE (Open Food Facts) ───────────────────────────
@@ -574,16 +573,11 @@ Responde SOLO el JSON."""
                 try:
                     with urllib.request.urlopen(img_url, timeout=5) as ir:
                         img_bytes = ir.read()
-                    if REMBG_AVAILABLE:
-                        img = Image.open(io.BytesIO(img_bytes)).convert("RGBA")
-                    else:
-                        img = Image.open(io.BytesIO(img_bytes)).convert("RGB")
+                    img = Image.open(io.BytesIO(img_bytes)).convert("RGB")
                     img.thumbnail((128, 128), Image.LANCZOS)
                     buf = io.BytesIO()
-                    fmt_save = "PNG" if REMBG_AVAILABLE else "JPEG"
-                    img.save(buf, format=fmt_save, quality=85)
-                    mt = "image/png" if REMBG_AVAILABLE else "image/jpeg"
-                    thumbnail = f"data:{mt};base64,{base64.b64encode(buf.getvalue()).decode()}"
+                    img.save(buf, format="JPEG", quality=85)
+                    thumbnail = f"data:image/jpeg;base64,{base64.b64encode(buf.getvalue()).decode()}"
                 except Exception:
                     pass
 

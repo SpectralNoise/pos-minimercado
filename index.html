@@ -1282,7 +1282,6 @@ table.inv-table {
           <button class="btn-analyze" id="btn-analyze" onclick="analyzePhoto()">✨ Analizar con IA</button>
         </div>
         <div class="analyze-status" id="analyze-status"></div>
-        <button id="btn-rembg" onclick="removeBg()" style="display:none;width:100%;margin-top:6px;padding:8px;border-radius:8px;border:1px solid var(--border);background:var(--surf-2);color:var(--text-2);font-family:var(--ff-disp);font-size:13px;font-weight:700;cursor:pointer;letter-spacing:.5px;">🪄 QUITAR FONDO</button>
       </div>
 
       <input type="hidden" id="prod-emoji" value="📦">
@@ -1392,6 +1391,12 @@ table.inv-table {
         <span class="dif-lbl" id="dif-lbl">Cuadre perfecto</span>
         <span class="dif-val" id="dif-val">$0</span>
       </div>
+    </div>
+
+    <!-- Resumen IA del turno -->
+    <div class="cierre-section" id="cierre-ia-section" style="display:none">
+      <h4>✨ Resumen del turno</h4>
+      <div id="cierre-ia-texto" style="font-size:14px;line-height:1.6;color:var(--text);background:var(--accent-bg);border:1px solid var(--accent-brd);border-radius:var(--r-md);padding:12px;min-height:48px"></div>
     </div>
 
     <div style="display:flex;gap:8px;padding:0 24px 8px">
@@ -1759,7 +1764,6 @@ async function lookupAndOffer(barcode) {
         document.getElementById('photo-img').src = p.thumbnail;
         document.getElementById('photo-preview').style.display = 'block';
         document.getElementById('photo-zone').style.display    = 'none';
-        document.getElementById('btn-rembg').style.display     = 'block';
         document.getElementById('analyze-status').textContent  = '✅ Imagen de Open Food Facts';
       }
       _applyMeliPrice(p.precio_sugerido);
@@ -1795,7 +1799,6 @@ async function lookupFillModal(barcode) {
       document.getElementById('photo-img').src = p.thumbnail;
       document.getElementById('photo-preview').style.display = 'block';
       document.getElementById('photo-zone').style.display    = 'none';
-      document.getElementById('btn-rembg').style.display     = 'block';
       if (status) status.textContent = '✅ Datos de Open Food Facts';
     } else {
       if (status) status.textContent = '';
@@ -2110,10 +2113,13 @@ function onBarcodeKey(e) {
     if (val) {
       e.target.classList.add('scanned');
       setTimeout(() => e.target.classList.remove('scanned'), 500);
-      showToast(`📦 Código leído: ${val}`);
-      // Si el nombre está vacío, pasar el foco al nombre
+      // Auto-buscar nombre del producto por código de barras
       const nameEl = document.getElementById('prod-name');
-      if (!nameEl.value) setTimeout(() => nameEl.focus(), 100);
+      if (!nameEl.value) {
+        lookupFillModal(val);
+      } else {
+        showToast(`📦 Código leído: ${val}`);
+      }
     }
   }
 }
@@ -2148,7 +2154,6 @@ function onPhotoSelected(event) {
       document.getElementById('photo-img').src = dataUrl;
       document.getElementById('photo-preview').style.display = 'block';
       document.getElementById('photo-zone').style.display = 'none';
-      document.getElementById('btn-rembg').style.display = 'block';
 
       const status = document.getElementById('analyze-status');
       const btn    = document.getElementById('btn-analyze');
@@ -2214,36 +2219,6 @@ async function analyzePhoto() {
   }
 }
 
-async function removeBg() {
-  if (!currentImageB64) { showToast('⚠ Primero selecciona una imagen'); return; }
-  const btn    = document.getElementById('btn-rembg');
-  const status = document.getElementById('analyze-status');
-  btn.disabled = true;
-  btn.textContent = '⏳ Procesando...';
-  status.textContent = 'Quitando fondo con IA...';
-  try {
-    const res = await fetch('/remove-bg', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ image: currentImageB64, mediaType: currentMediaType })
-    });
-    const data = await res.json();
-    if (!res.ok || data.error) throw new Error(data.error || 'Error del servidor');
-    // Reemplazar imagen actual con la versión sin fondo
-    currentImageB64  = data.image;
-    currentMediaType = data.mediaType;
-    thumbnailChanged = true;
-    document.getElementById('photo-img').src = `data:${data.mediaType};base64,${data.image}`;
-    status.textContent = '✅ Fondo eliminado';
-    showToast('🪄 Fondo eliminado correctamente');
-  } catch (err) {
-    status.textContent = `⚠ ${err.message}`;
-    showToast('⚠ ' + err.message);
-  } finally {
-    btn.disabled = false;
-    btn.textContent = '🪄 Quitar fondo';
-  }
-}
 
 function resetPhotoZone() {
   currentImageB64  = null;
@@ -2254,13 +2229,10 @@ function resetPhotoZone() {
   document.getElementById('photo-input').value = '';
   document.getElementById('photo-preview').style.display = 'none';
   document.getElementById('photo-zone').style.display = 'flex';
-  document.getElementById('btn-rembg').style.display = 'none';
   document.getElementById('photo-img').src = '';
   document.getElementById('analyze-status').textContent = '';
   document.getElementById('btn-analyze').disabled = false;
   document.getElementById('btn-analyze').innerHTML = '✨ Analizar con IA';
-  document.getElementById('btn-rembg').disabled = false;
-  document.getElementById('btn-rembg').textContent = '🪄 Quitar fondo';
 }
 
 function openProdModal(id) {
@@ -2281,7 +2253,6 @@ function openProdModal(id) {
       document.getElementById('photo-img').src = `/api/productos/${p.id}/thumbnail`;
       document.getElementById('photo-preview').style.display = 'block';
       document.getElementById('photo-zone').style.display = 'none';
-      document.getElementById('btn-rembg').style.display = 'block';
       document.getElementById('analyze-status').textContent = 'Imagen actual del producto.';
       thumbnailChanged = false; // no enviar thumbnail al guardar salvo que cambie
     }
@@ -2518,8 +2489,32 @@ function openCierreModal() {
   document.getElementById('cierre-esperado').textContent     = fmt(esperado);
   document.getElementById('cierre-contado').value            = '';
   document.getElementById('diferencia-box').style.display    = 'none';
+  document.getElementById('cierre-ia-section').style.display = 'none';
+  document.getElementById('cierre-ia-texto').textContent     = '';
 
   openModal('modal-cierre');
+
+  // Generar resumen IA en background
+  const durMin = Math.round((now - cajaSession.inicio) / 60000);
+  const tally  = {};
+  sesVentas.forEach(s => s.items.forEach(i => { tally[i.name] = (tally[i.name]||0) + i.qty; }));
+  const topProds = Object.entries(tally).sort((a,b)=>b[1]-a[1]).slice(0,5).map(([name,qty])=>({name,qty}));
+
+  const iaSection = document.getElementById('cierre-ia-section');
+  const iaTexto   = document.getElementById('cierre-ia-texto');
+  iaSection.style.display = 'block';
+  iaTexto.textContent = '⏳ Generando resumen...';
+
+  fetch('/api/ai-cierre', {
+    method: 'POST',
+    headers: {'Content-Type':'application/json'},
+    body: JSON.stringify({ cajero: cajaSession.cajero, duracion_min: durMin,
+      total, efectivo, transf, tx_count: sesVentas.length, top_productos: topProds })
+  }).then(r => r.json()).then(d => {
+    iaTexto.textContent = d.resumen || '—';
+  }).catch(() => {
+    iaSection.style.display = 'none';
+  });
 }
 
 function calcDiferencia() {

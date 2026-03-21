@@ -1,0 +1,76 @@
+<h2>Arquitectura del POS</h2>
+<p class="subtitle">Servidor local en PC · Tablet vía WiFi · Offline-first · Preparado para nube futura</p>
+
+<div class="mockup">
+  <div class="mockup-header">Diagrama del sistema</div>
+  <div class="mockup-body" style="font-family:monospace;font-size:13px;line-height:2">
+
+    <div style="display:flex;gap:24px;flex-wrap:wrap;align-items:flex-start">
+
+      <div style="flex:1;min-width:200px;background:#0f172a;border-radius:8px;padding:16px">
+        <div style="color:#38bdf8;font-weight:bold;margin-bottom:8px">🖥️ PC del mostrador</div>
+        <div style="background:#1e293b;padding:8px;border-radius:4px;margin-bottom:6px">
+          <div style="color:#86efac">Python HTTP Server :5050</div>
+          <div style="color:#94a3b8;font-size:11px">Rutas: /venta /inventario /reporte /factura</div>
+        </div>
+        <div style="background:#1e293b;padding:8px;border-radius:4px;margin-bottom:6px">
+          <div style="color:#86efac">SQLite (pos.db)</div>
+          <div style="color:#94a3b8;font-size:11px">productos · ventas · clientes · facturas</div>
+        </div>
+        <div style="background:#1e293b;padding:8px;border-radius:4px">
+          <div style="color:#86efac">Web UI (HTML/CSS/JS)</div>
+          <div style="color:#94a3b8;font-size:11px">Admin: inventario · reportes · configuración</div>
+        </div>
+      </div>
+
+      <div style="display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;padding:16px">
+        <div style="color:#fbbf24;font-size:11px">WiFi local</div>
+        <div style="color:#fbbf24;font-size:20px">⟷</div>
+        <div style="color:#fbbf24;font-size:11px">192.168.x.x</div>
+      </div>
+
+      <div style="flex:1;min-width:200px;background:#0f172a;border-radius:8px;padding:16px">
+        <div style="color:#c084fc;font-weight:bold;margin-bottom:8px">📱 Tablet del cajero</div>
+        <div style="background:#1e293b;padding:8px;border-radius:4px;margin-bottom:6px">
+          <div style="color:#86efac">Chrome / Safari</div>
+          <div style="color:#94a3b8;font-size:11px">Pantalla de cobro táctil</div>
+        </div>
+        <div style="background:#1e293b;padding:8px;border-radius:4px;margin-bottom:6px">
+          <div style="color:#86efac">🔫 Lector código de barras</div>
+          <div style="color:#94a3b8;font-size:11px">Bluetooth/USB → input de búsqueda</div>
+        </div>
+        <div style="background:#1e293b;padding:8px;border-radius:4px">
+          <div style="color:#86efac">Impresora térmica / WhatsApp</div>
+          <div style="color:#94a3b8;font-size:11px">Recibo físico o por mensaje</div>
+        </div>
+      </div>
+
+      <div style="display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;padding:16px">
+        <div style="color:#64748b;font-size:11px">Futuro</div>
+        <div style="color:#64748b;font-size:20px">⟷</div>
+        <div style="color:#64748b;font-size:11px">Seenode</div>
+      </div>
+
+      <div style="flex:1;min-width:180px;background:#0f172a;border:1px dashed #334155;border-radius:8px;padding:16px;opacity:0.5">
+        <div style="color:#64748b;font-weight:bold;margin-bottom:8px">☁️ Nube (Fase 2)</div>
+        <div style="background:#1e293b;padding:8px;border-radius:4px;margin-bottom:6px">
+          <div style="color:#64748b">Seenode / Railway</div>
+          <div style="color:#475569;font-size:11px">Backup automático</div>
+        </div>
+        <div style="background:#1e293b;padding:8px;border-radius:4px">
+          <div style="color:#64748b">Multi-tienda</div>
+          <div style="color:#475569;font-size:11px">Acceso remoto del dueño</div>
+        </div>
+      </div>
+
+    </div>
+
+    <div style="margin-top:16px;padding:12px;background:#0f172a;border-radius:8px;border-left:3px solid #22c55e">
+      <span style="color:#22c55e">✓ Sin internet:</span>
+      <span style="color:#94a3b8"> PC + Tablet siguen funcionando en red local. Ventas se guardan en SQLite. Cuando vuelva internet → sync automático con nube.</span>
+    </div>
+
+  </div>
+</div>
+
+<p class="subtitle" style="margin-top:16px">¿Esta arquitectura tiene sentido? ¿Algo que cambiarías?</p>

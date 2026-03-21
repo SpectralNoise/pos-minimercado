@@ -1,0 +1,86 @@
+<h2>¿Cómo construimos el POS?</h2>
+<p class="subtitle">3 enfoques arquitectónicos — con trade-offs reales. Mi recomendación está marcada.</p>
+
+<div class="cards">
+
+  <div class="card" data-choice="a" onclick="toggleSelect(this)">
+    <div class="card-image" style="background:#1e293b;padding:16px;font-family:monospace;font-size:12px;color:#94a3b8;">
+      <div style="color:#38bdf8;margin-bottom:8px">[ PC ] ← servidor local</div>
+      <div style="margin-left:12px;color:#86efac">SQLite DB + Python HTTP</div>
+      <div style="margin-left:12px;color:#86efac">Web UI (Chrome)</div>
+      <div style="margin-top:8px;color:#38bdf8">[ Tablet ] ← mismo WiFi</div>
+      <div style="margin-left:12px;color:#86efac">Browser → http://192.168.x.x</div>
+      <div style="margin-top:8px;color:#fbbf24">Internet caído → sigue funcionando</div>
+    </div>
+    <div class="card-body">
+      <h3>⭐ A) Servidor local en PC (recomendado)</h3>
+      <p>Python corre en el PC del mostrador. La tablet se conecta por WiFi local. Base de datos SQLite en el PC. Sin internet = funciona igual.</p>
+      <div class="pros-cons" style="margin-top:8px">
+        <div class="pros"><h4>Pros</h4><ul>
+          <li>100% offline, siempre</li>
+          <li>Un solo punto de datos (PC)</li>
+          <li>Tablet solo necesita browser</li>
+          <li>Stack conocido (como GuitarEffects)</li>
+        </ul></div>
+        <div class="cons"><h4>Contras</h4><ul>
+          <li>PC debe estar encendido para que la tablet funcione</li>
+          <li>Backup manual necesario</li>
+        </ul></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="card" data-choice="b" onclick="toggleSelect(this)">
+    <div class="card-image" style="background:#1e293b;padding:16px;font-family:monospace;font-size:12px;color:#94a3b8;">
+      <div style="color:#38bdf8;margin-bottom:8px">[ PC ] + [ Tablet ]</div>
+      <div style="margin-left:12px;color:#86efac">Cada uno: Electron App</div>
+      <div style="margin-left:12px;color:#86efac">IndexedDB local</div>
+      <div style="margin-top:8px;color:#fbbf24">Sync cuando hay internet</div>
+      <div style="color:#f87171;margin-top:8px">⚠ Conflictos de datos posibles</div>
+    </div>
+    <div class="card-body">
+      <h3>B) App Electron (cada dispositivo independiente)</h3>
+      <p>App instalada en PC y tablet. Cada una guarda datos localmente. Se sincronizan por la nube cuando hay internet. Más resiliente pero más complejo.</p>
+      <div class="pros-cons" style="margin-top:8px">
+        <div class="pros"><h4>Pros</h4><ul>
+          <li>Tablet funciona sin el PC</li>
+          <li>Más robusto ante fallos</li>
+        </ul></div>
+        <div class="cons"><h4>Contras</h4><ul>
+          <li>Instalar app en cada dispositivo</li>
+          <li>Sync de conflictos complejo</li>
+          <li>Mucho más trabajo de desarrollo</li>
+        </ul></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="card" data-choice="c" onclick="toggleSelect(this)">
+    <div class="card-image" style="background:#1e293b;padding:16px;font-family:monospace;font-size:12px;color:#94a3b8;">
+      <div style="color:#38bdf8;margin-bottom:8px">[ Nube ] ← Railway / Render</div>
+      <div style="margin-left:12px;color:#86efac">PostgreSQL + FastAPI</div>
+      <div style="margin-top:8px;color:#38bdf8">[ PC ] + [ Tablet ]</div>
+      <div style="margin-left:12px;color:#86efac">Browser → cloud URL</div>
+      <div style="color:#f87171;margin-top:8px">⚠ Si cae internet → sin servicio</div>
+    </div>
+    <div class="card-body">
+      <h3>C) Cloud-hosted (SaaS ready)</h3>
+      <p>Backend en la nube. Acceso desde cualquier dispositivo con browser. Ideal para vender a múltiples tiendas, pero requiere internet estable.</p>
+      <div class="pros-cons" style="margin-top:8px">
+        <div class="pros"><h4>Pros</h4><ul>
+          <li>Fácil de vender a otras tiendas</li>
+          <li>Sin instalación en cliente</li>
+          <li>Backups automáticos</li>
+        </ul></div>
+        <div class="cons"><h4>Contras</h4><ul>
+          <li>Depende 100% del internet</li>
+          <li>Costo mensual de hosting</li>
+          <li>Latencia en cada operación</li>
+        </ul></div>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<p class="subtitle" style="margin-top:16px">💡 Para el piloto recomiendo <strong>A</strong> — es offline-first, usa stack conocido, y la tablet solo necesita abrir el browser. Cuando quieras escalar a múltiples tiendas, se puede migrar a C.</p>
