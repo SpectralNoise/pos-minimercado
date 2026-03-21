@@ -442,23 +442,28 @@ class Handler(BaseHTTPRequestHandler):
                 self.send_error_json("Falta el campo 'image'"); return
 
             client = anthropic.Anthropic(api_key=ANTHROPIC_API_KEY)
-            prompt = """Analiza esta imagen de un producto de mini mercado / tienda de abarrotes.
-Extrae la siguiente información y responde ÚNICAMENTE con JSON válido, sin texto adicional:
+            prompt = """Eres un lector experto de empaques de productos de supermercado colombiano.
 
+TAREA PRINCIPAL: Lee con precisión el texto impreso en el empaque de la imagen.
+
+Reglas estrictas:
+1. El "nombre" debe ser EXACTAMENTE el texto del empaque: marca + producto + variedad + gramaje/volumen.
+   Ejemplos correctos: "Arroz Diana Extra 500g", "Leche Entera Alquería 1L", "Coca-Cola 1.5L"
+   Ejemplos INCORRECTOS: "arroz", "leche", "gaseosa"
+2. Si el texto es difícil de leer, intenta de todas formas — transcribe lo que puedas ver.
+3. El código de barras: si ves números debajo de las barras, transcríbelos exactamente.
+
+Responde ÚNICAMENTE con este JSON válido, sin texto adicional:
 {
-  "nombre": "nombre completo del producto con presentación (ej: Arroz Diana 500g)",
+  "nombre": "texto exacto del empaque: marca + producto + gramaje",
   "categoria": "una de: Granos, Bebidas, Lácteos, Aceites, Enlatados, Dulces, Aseo, Frescos, Condimentos, Otro",
-  "descripcion": "descripción breve del producto en 1 oración",
-  "codigo_barras": "código de barras si es visible, si no deja vacío",
-  "emoji": "un emoji que represente el producto",
-  "peso_volumen": "peso o volumen del producto si aparece (ej: 500g, 1L)"
-}
-
-Si no puedes identificar algún campo con certeza, deja el valor como cadena vacía "".
-Responde SOLO el JSON."""
+  "descripcion": "descripción breve en 1 oración",
+  "codigo_barras": "números del código de barras si son visibles, si no vacío",
+  "emoji": "emoji que represente el producto"
+}"""
 
             message = client.messages.create(
-                model="claude-haiku-4-5-20251001",
+                model="claude-sonnet-4-6",
                 max_tokens=400,
                 messages=[{"role": "user", "content": [
                     {"type": "image", "source": {"type": "base64", "media_type": media_type, "data": image_b64}},
