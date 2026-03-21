@@ -735,9 +735,10 @@ table.inv-table {
 .modal-producto-inner { max-width: 480px; }
 .prod-form { padding: 20px 24px; display: flex; flex-direction: column; gap: 14px; }
 .form-row { display: flex; gap: 12px; }
-.form-group { display: flex; flex-direction: column; gap: 6px; flex: 1; }
+.form-group { display: flex; flex-direction: column; gap: 6px; flex: 1; min-width: 0; }
 .form-group label { font-size: 12px; text-transform: uppercase; letter-spacing: .07em; color: var(--text-2); font-family: var(--ff-disp); font-weight: 600; }
 .form-input {
+  width: 100%; box-sizing: border-box;
   height: 42px; background: var(--surf-2); border: 1px solid var(--border);
   border-radius: var(--r-md); color: var(--text); font-family: var(--ff-body);
   font-size: 14px; padding: 0 12px; outline: none;
