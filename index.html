@@ -2084,62 +2084,71 @@ async function sendWhatsApp() {
   const s = lastSale;
 
   // Generar imagen del recibo con Canvas
-  const W = 400, PAD = 24, LINE = 22;
+  const W = 420, PAD = 28, LH = 19, LHsm = 17;
   const now = new Date();
   const fecha = now.toLocaleDateString('es-CO', {day:'2-digit',month:'2-digit',year:'numeric'});
   const hora  = now.toLocaleTimeString('es-CO', {hour:'2-digit',minute:'2-digit'});
 
   // Calcular alto dinámico
-  const rows = s.items.length;
   const extraLines = s.method === 'efectivo' ? 2 : 1;
-  const H = PAD*2 + LINE*4 + 10 + LINE*(rows+1) + 10 + LINE*(2+extraLines) + LINE*2 + PAD;
+  const H = PAD + 26 + LH + LHsm + 16        // cabecera
+          + 10 + s.items.length * LH + 12      // items
+          + LH + extraLines * LHsm + 12        // totales
+          + LHsm * 2 + PAD;                    // pie
 
   const canvas = document.createElement('canvas');
-  canvas.width  = W * 2; // retina
+  canvas.width  = W * 2;
   canvas.height = H * 2;
   const ctx = canvas.getContext('2d');
   ctx.scale(2, 2);
 
-  // Fondo blanco
   ctx.fillStyle = '#fff';
   ctx.fillRect(0, 0, W, H);
-  ctx.fillStyle = '#111';
 
   let y = PAD;
-  const center = txt => { ctx.textAlign = 'center'; ctx.fillText(txt, W/2, y); y += LINE; };
-  const left   = txt => { ctx.textAlign = 'left';   ctx.fillText(txt, PAD, y); };
-  const right  = txt => { ctx.textAlign = 'right';  ctx.fillText(txt, W-PAD, y); };
-  const divider= () => { ctx.fillStyle='#ccc'; ctx.fillRect(PAD,y-6,W-PAD*2,1); ctx.fillStyle='#111'; y+=4; };
+  const center = (txt, font, color='#111') => {
+    ctx.font = font; ctx.fillStyle = color;
+    ctx.textAlign = 'center'; ctx.fillText(txt, W/2, y);
+  };
+  const row = (ltxt, rtxt, lfont, rfont='', color='#111') => {
+    ctx.fillStyle = color;
+    ctx.font = lfont; ctx.textAlign = 'left';  ctx.fillText(ltxt, PAD, y);
+    ctx.font = rfont||lfont; ctx.textAlign = 'right'; ctx.fillText(rtxt, W-PAD, y);
+  };
+  const div = (color='#ddd') => {
+    ctx.fillStyle = color;
+    ctx.fillRect(PAD, y, W-PAD*2, 1);
+    ctx.fillStyle = '#111';
+  };
 
-  // Cabecera
-  ctx.font = 'bold 18px monospace'; center('Mini Mercado');
-  ctx.font = '13px monospace';      center('Recibo de Venta');
-  ctx.font = '12px monospace';      center(`#${s.id}  ·  ${fecha} ${hora}`);
-  y += 6; divider();
+  // ── Cabecera ────────────────────────────────
+  center('Mini Mercado', 'bold 20px monospace'); y += 26;
+  center('Recibo de Venta', '13px monospace', '#555'); y += LH;
+  center(`#${s.id}  ·  ${fecha}  ${hora}`, '11px monospace', '#888'); y += LHsm;
+  y += 10; div(); y += 10;
 
-  // Items
+  // ── Items ───────────────────────────────────
   ctx.font = '13px monospace';
   s.items.forEach(i => {
-    left(`${i.qty}x ${i.name.substring(0,22)}`);
-    right(fmt(i.price * i.qty));
-    y += LINE;
+    row(`${i.qty}x  ${i.name.substring(0,24)}`, fmt(i.price * i.qty), '13px monospace');
+    y += LH;
   });
-  y += 4; divider();
+  y += 8; div(); y += 10;
 
-  // Totales
-  ctx.font = 'bold 15px monospace';
-  left('TOTAL'); right(fmt(s.total)); y += LINE;
-
-  ctx.font = '12px monospace';
+  // ── Totales ─────────────────────────────────
+  row('TOTAL', fmt(s.total), 'bold 15px monospace', 'bold 15px monospace'); y += LH + 2;
+  ctx.font = '12px monospace'; ctx.fillStyle = '#444';
   if (s.method === 'efectivo') {
-    left('Recibido'); right(fmt(s.recibido)); y += LINE;
-    left('Cambio');   right(fmt(s.cambio));   y += LINE;
+    row('Recibido', fmt(s.recibido), '12px monospace', '', '#555'); y += LHsm;
+    row('Cambio',   fmt(s.cambio),   '12px monospace', '', '#555'); y += LHsm;
   } else {
-    left('Transferencia'); right('Confirmado'); y += LINE;
+    row('Transferencia', 'Confirmado ✓', '12px monospace', '', '#555'); y += LHsm;
   }
-  y += 8; divider();
-  ctx.font = '12px monospace';
-  center('¡Gracias por su compra!'); center('Vuelva pronto 🙂');
+  y += 12; div(); y += 12;
+
+  // ── Pie ─────────────────────────────────────
+  center('¡Gracias por su compra!', '12px monospace', '#333'); y += LHsm + 2;
+  center('Vuelva pronto 🙂', '12px monospace', '#888');
 
   // Intentar Web Share API (funciona en móvil como imagen)
   canvas.toBlob(async blob => {
