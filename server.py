@@ -456,18 +456,22 @@ Responde SOLO el JSON."""
                 except Exception:
                     pass
 
-            # Precio sugerido desde Mercado Libre Colombia
-            precio_sugerido = self._meli_price(name or barcode)
+            # Mercado Libre: precio + imagen real
+            meli = self._meli_lookup(name or barcode)
+            precio_sugerido = {k: meli[k] for k in ("min","max","medio","n")} if meli else None
+            # Preferir imagen de MELI (foto real) sobre la de Open Food Facts
+            if meli and meli.get("thumbnail"):
+                thumbnail = meli["thumbnail"]
 
             self.send_json({
                 "found": True,
                 "product": {
-                    "name": name or "Producto sin nombre",
-                    "cat": cat,
-                    "emoji": emoji,
-                    "barcode": barcode,
-                    "thumbnail": thumbnail,
-                    "precio_sugerido": precio_sugerido,
+                    "name":             name or "Producto sin nombre",
+                    "cat":              cat,
+                    "emoji":            emoji,
+                    "barcode":          barcode,
+                    "thumbnail":        thumbnail,
+                    "precio_sugerido":  precio_sugerido,
                 }
             })
         except urllib.error.URLError:
@@ -475,8 +479,8 @@ Responde SOLO el JSON."""
         except Exception as e:
             self.send_json({"found": False, "error": str(e)})
 
-    def _meli_price(self, query):
-        """Consulta Mercado Libre Colombia y devuelve estadísticas de precio."""
+    def _meli_lookup(self, query):
+        """Consulta Mercado Libre Colombia: precios reales + imagen del primer resultado."""
         try:
             q = urllib.request.quote(query)
             url = f"https://api.mercadolibre.com/sites/MCO/search?q={q}&limit=10&condition=new"
@@ -486,18 +490,40 @@ Responde SOLO el JSON."""
             items = data.get("results", [])
             if not items:
                 return None
+
+            # Precios (descarta outliers)
             precios = [i["price"] for i in items if i.get("price", 0) > 0]
             if not precios:
                 return None
             precios.sort()
-            # Descarta outliers (quita el 20% más barato y más caro)
             corte = max(1, len(precios) // 5)
             precios = precios[corte:-corte] if len(precios) > 4 else precios
+
+            # Imagen: usar el thumbnail del primer resultado con precio válido
+            thumbnail = None
+            for item in items:
+                img_url = item.get("thumbnail", "")
+                if img_url:
+                    # MELI devuelve URLs con -I (pequeña), cambiar a -O (mayor calidad)
+                    img_url = img_url.replace("-I.jpg", "-O.jpg").replace("-I.webp", "-O.jpg")
+                    try:
+                        with urllib.request.urlopen(img_url, timeout=4) as ir:
+                            img_bytes = ir.read()
+                        img = Image.open(io.BytesIO(img_bytes)).convert("RGB")
+                        img.thumbnail((256, 256), Image.LANCZOS)
+                        buf = io.BytesIO()
+                        img.save(buf, format="JPEG", quality=88)
+                        thumbnail = f"data:image/jpeg;base64,{base64.b64encode(buf.getvalue()).decode()}"
+                        break
+                    except Exception:
+                        continue
+
             return {
-                "min":   round(min(precios)),
-                "max":   round(max(precios)),
-                "medio": round(sum(precios) / len(precios)),
-                "n":     len(items),
+                "min":      round(min(precios)),
+                "max":      round(max(precios)),
+                "medio":    round(sum(precios) / len(precios)),
+                "n":        len(items),
+                "thumbnail": thumbnail,
             }
         except Exception:
             return None
