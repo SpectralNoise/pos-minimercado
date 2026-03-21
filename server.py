@@ -227,7 +227,7 @@ class Handler(BaseHTTPRequestHandler):
         if path in ("/", "/index.html"):
             self._serve_file(BASE_DIR / "index.html", "text/html")
         elif path == "/api/status":
-            self._json({"db": "turso" if USE_TURSO else "sqlite", "turso_url": bool(TURSO_URL), "libsql_ok": _LIBSQL_OK})
+            self.send_json({"db": "turso" if USE_TURSO else "sqlite", "turso_url": bool(TURSO_URL), "libsql_ok": _LIBSQL_OK})
         elif path == "/api/productos":
             conn = get_db()
             try:
