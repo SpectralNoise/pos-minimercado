@@ -1757,8 +1757,9 @@ async function lookupAndOffer(barcode) {
         document.getElementById('btn-rembg').style.display     = 'block';
         document.getElementById('analyze-status').textContent  = '✅ Imagen de Open Food Facts';
       }
+      _applyMeliPrice(p.precio_sugerido);
       document.getElementById('prod-price').focus();
-      showToast(`✅ Datos pre-llenados — solo ingresa precio y stock`);
+      showToast(`✅ Datos pre-llenados — revisa el precio sugerido`);
     }, 200);
   } catch (err) {
     showToast(`⚠ Error de búsqueda: ${err.message}`);
@@ -1793,11 +1794,26 @@ async function lookupFillModal(barcode) {
     } else {
       if (status) status.textContent = '';
     }
+    _applyMeliPrice(p.precio_sugerido);
     document.getElementById('prod-price').focus();
-    showToast(`✅ "${p.name}" encontrado — ingresa precio y stock`);
+    showToast(`✅ "${p.name}" encontrado — revisa el precio sugerido`);
   } catch (err) {
     if (status) status.textContent = '';
   }
+}
+
+function _applyMeliPrice(ps) {
+  if (!ps) return;
+  const priceEl = document.getElementById('prod-price');
+  if (!priceEl.value || priceEl.value === '0') priceEl.value = ps.medio;
+  let hint = document.getElementById('meli-price-hint');
+  if (!hint) {
+    hint = document.createElement('div');
+    hint.id = 'meli-price-hint';
+    hint.style.cssText = 'font-size:11px;color:var(--text-2);margin-top:4px;font-family:var(--ff-mono);padding:4px 8px;background:var(--surf-2);border-radius:6px;border:1px solid var(--border)';
+    priceEl.parentNode.appendChild(hint);
+  }
+  hint.innerHTML = `📊 Mercado Libre Colombia: $${ps.min.toLocaleString('es-CO')} – $${ps.max.toLocaleString('es-CO')} COP <span style="color:var(--text-3)">(${ps.n} ofertas)</span>`;
 }
 
 function _processScan(barcode) {
@@ -2199,6 +2215,8 @@ async function removeBg() {
 function resetPhotoZone() {
   currentImageB64  = null;
   currentMediaType = 'image/jpeg';
+  const hint = document.getElementById('meli-price-hint');
+  if (hint) hint.remove();
   document.getElementById('photo-input').value = '';
   document.getElementById('photo-preview').style.display = 'none';
   document.getElementById('photo-zone').style.display = 'flex';

@@ -456,6 +456,9 @@ Responde SOLO el JSON."""
                 except Exception:
                     pass
 
+            # Precio sugerido desde Mercado Libre Colombia
+            precio_sugerido = self._meli_price(name or barcode)
+
             self.send_json({
                 "found": True,
                 "product": {
@@ -464,12 +467,40 @@ Responde SOLO el JSON."""
                     "emoji": emoji,
                     "barcode": barcode,
                     "thumbnail": thumbnail,
+                    "precio_sugerido": precio_sugerido,
                 }
             })
         except urllib.error.URLError:
             self.send_json({"found": False, "error": "Sin conexión a Open Food Facts"})
         except Exception as e:
             self.send_json({"found": False, "error": str(e)})
+
+    def _meli_price(self, query):
+        """Consulta Mercado Libre Colombia y devuelve estadísticas de precio."""
+        try:
+            q = urllib.request.quote(query)
+            url = f"https://api.mercadolibre.com/sites/MCO/search?q={q}&limit=10&condition=new"
+            req = urllib.request.Request(url, headers={"User-Agent": "POS-MiniMercado/1.0"})
+            with urllib.request.urlopen(req, timeout=5) as r:
+                data = json.loads(r.read())
+            items = data.get("results", [])
+            if not items:
+                return None
+            precios = [i["price"] for i in items if i.get("price", 0) > 0]
+            if not precios:
+                return None
+            precios.sort()
+            # Descarta outliers (quita el 20% más barato y más caro)
+            corte = max(1, len(precios) // 5)
+            precios = precios[corte:-corte] if len(precios) > 4 else precios
+            return {
+                "min":   round(min(precios)),
+                "max":   round(max(precios)),
+                "medio": round(sum(precios) / len(precios)),
+                "n":     len(items),
+            }
+        except Exception:
+            return None
 
 
 # ─── INICIO ────────────────────────────────────────────────────────
