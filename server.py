@@ -606,22 +606,24 @@ Al final, un consejo breve sobre los productos sin rotación."""
             if not cajero:
                 self.send_error_json("Falta el nombre del cajero"); return
             conn = get_db()
-            # Verificar si ya existe un turno abierto
-            activo = conn.execute(
-                "SELECT * FROM turnos WHERE estado='abierto' ORDER BY apertura_at DESC LIMIT 1"
-            ).fetchone()
-            if activo:
+            try:
+                # Verificar si ya existe un turno abierto
+                activo = conn.execute(
+                    "SELECT * FROM turnos WHERE estado='abierto' ORDER BY apertura_at DESC LIMIT 1"
+                ).fetchone()
+                if activo:
+                    self.send_json({"error": "Ya existe un turno abierto", "turno_activo": row_to_dict(activo)}, 409)
+                    return
+                c = conn.cursor()
+                c.execute(
+                    "INSERT INTO turnos (cajero, monto_inicial, caja_id) VALUES (?,?,?)",
+                    (cajero, body.get("monto_inicial", 0), body.get("caja_id", "caja-1"))
+                )
+                turno = conn.execute("SELECT * FROM turnos WHERE id=?", (c.lastrowid,)).fetchone()
+                conn.commit()
+                self.send_json(row_to_dict(turno), 201)
+            finally:
                 conn.close()
-                self.send_json({"error": "Ya existe un turno abierto", "turno_activo": row_to_dict(activo)}, 409)
-                return
-            c = conn.cursor()
-            c.execute(
-                "INSERT INTO turnos (cajero, monto_inicial, caja_id) VALUES (?,?,?)",
-                (cajero, body.get("monto_inicial", 0), body.get("caja_id", "caja-1"))
-            )
-            turno = conn.execute("SELECT * FROM turnos WHERE id=?", (c.lastrowid,)).fetchone()
-            conn.commit(); conn.close()
-            self.send_json(row_to_dict(turno), 201)
         except Exception as e:
             self.send_error_json(str(e), 500)
 
