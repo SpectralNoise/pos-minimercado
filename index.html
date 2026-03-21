@@ -1590,7 +1590,8 @@ document.getElementById('search-input').addEventListener('keydown', function(e) 
       setTimeout(() => { this.value = ''; searchQuery = ''; renderProducts(); }, 700);
     }
   } else {
-    showToast(`⚠ Código no encontrado: ${val}`);
+    lookupAndOffer(val);
+    this.value = '';
   }
 });
 
@@ -1724,6 +1725,81 @@ function closeCameraScanner() {
   document.getElementById('cam-overlay').classList.remove('open');
 }
 
+// ─── OPEN FOOD FACTS LOOKUP ────────────────────────────────────────
+
+// Busca el código en Open Food Facts y ofrece agregar el producto al inventario
+async function lookupAndOffer(barcode) {
+  showToast(`🔍 Buscando código ${barcode}...`);
+  try {
+    const res  = await fetch(`/api/lookup-barcode/${encodeURIComponent(barcode)}`);
+    const data = await res.json();
+    if (!data.found) {
+      showToast(`⚠ Código no encontrado: ${barcode}`);
+      return;
+    }
+    const p = data.product;
+    // Abrir modal de producto pre-llenado para agregarlo al inventario
+    const confirmed = confirm(`🛒 Producto encontrado:\n"${p.name}" (${p.cat})\n\n¿Agregar al inventario?`);
+    if (!confirmed) return;
+    openProdModal();
+    setTimeout(() => {
+      document.getElementById('prod-name').value    = p.name;
+      document.getElementById('prod-barcode').value = p.barcode;
+      document.getElementById('prod-cat').value     = p.cat;
+      document.getElementById('prod-emoji').value   = p.emoji;
+      if (p.thumbnail) {
+        const parts = p.thumbnail.split(',');
+        currentMediaType = (parts[0].match(/:(.*?);/) || [])[1] || 'image/jpeg';
+        currentImageB64  = parts[1];
+        document.getElementById('photo-img').src = p.thumbnail;
+        document.getElementById('photo-preview').style.display = 'block';
+        document.getElementById('photo-zone').style.display    = 'none';
+        document.getElementById('btn-rembg').style.display     = 'block';
+        document.getElementById('analyze-status').textContent  = '✅ Imagen de Open Food Facts';
+      }
+      document.getElementById('prod-price').focus();
+      showToast(`✅ Datos pre-llenados — solo ingresa precio y stock`);
+    }, 200);
+  } catch (err) {
+    showToast(`⚠ Error de búsqueda: ${err.message}`);
+  }
+}
+
+// Busca y pre-llena el modal de inventario (llamado al escanear en el modal)
+async function lookupFillModal(barcode) {
+  const status = document.getElementById('analyze-status');
+  if (status) status.textContent = '🔍 Buscando en base de datos...';
+  try {
+    const res  = await fetch(`/api/lookup-barcode/${encodeURIComponent(barcode)}`);
+    const data = await res.json();
+    if (!data.found) {
+      if (status) status.textContent = '';
+      document.getElementById('prod-name').focus();
+      return;
+    }
+    const p = data.product;
+    document.getElementById('prod-name').value  = p.name;
+    document.getElementById('prod-cat').value   = p.cat;
+    document.getElementById('prod-emoji').value = p.emoji;
+    if (p.thumbnail) {
+      const parts = p.thumbnail.split(',');
+      currentMediaType = (parts[0].match(/:(.*?);/) || [])[1] || 'image/jpeg';
+      currentImageB64  = parts[1];
+      document.getElementById('photo-img').src = p.thumbnail;
+      document.getElementById('photo-preview').style.display = 'block';
+      document.getElementById('photo-zone').style.display    = 'none';
+      document.getElementById('btn-rembg').style.display     = 'block';
+      if (status) status.textContent = '✅ Datos de Open Food Facts';
+    } else {
+      if (status) status.textContent = '';
+    }
+    document.getElementById('prod-price').focus();
+    showToast(`✅ "${p.name}" encontrado — ingresa precio y stock`);
+  } catch (err) {
+    if (status) status.textContent = '';
+  }
+}
+
 function _processScan(barcode) {
   // ① Si el modal de producto está abierto (inventario) → llenar campo barcode
   if (document.getElementById('modal-producto').classList.contains('open')) {
@@ -1732,18 +1808,16 @@ function _processScan(barcode) {
     field.classList.add('scanned');
     setTimeout(() => field.classList.remove('scanned'), 500);
     showToast(`📦 Código leído: ${barcode}`);
+    // Auto-buscar en Open Food Facts si el nombre está vacío
     const nameEl = document.getElementById('prod-name');
-    if (!nameEl.value) setTimeout(() => nameEl.focus(), 80);
+    if (!nameEl.value) lookupFillModal(barcode);
     return;
   }
 
   // ② Pantalla de cobro → buscar producto y agregar al carrito
   const product = products.find(p => p.barcode === barcode);
   if (!product) {
-    showToast(`⚠ Código no encontrado: ${barcode}`);
-    // Mostrar lo escaneado en el campo de búsqueda para feedback visual
-    const si = document.getElementById('search-input');
-    if (si) { si.value = barcode; searchQuery = barcode; renderProducts(); }
+    lookupAndOffer(barcode);
     return;
   }
   if (product.stock === 0) {

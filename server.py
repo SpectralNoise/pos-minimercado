@@ -4,7 +4,7 @@ POS Mini Mercado - Servidor local
 Puerto 5051 · Sirve index.html, REST API SQLite, y endpoints de IA
 """
 
-import os, json, mimetypes, ssl, sqlite3, base64, io
+import os, json, mimetypes, ssl, sqlite3, base64, io, urllib.request, urllib.error
 from http.server import HTTPServer, BaseHTTPRequestHandler
 from pathlib import Path
 
@@ -163,6 +163,9 @@ class Handler(BaseHTTPRequestHandler):
             rows = conn.execute("SELECT * FROM productos ORDER BY name").fetchall()
             conn.close()
             self.send_json([row_to_dict(r) for r in rows])
+        elif path.startswith("/api/lookup-barcode/"):
+            barcode = path.split("/api/lookup-barcode/")[1]
+            self._lookup_barcode(barcode)
         elif path == "/api/ventas":
             conn = get_db()
             ventas = conn.execute(
@@ -379,6 +382,94 @@ Responde SOLO el JSON."""
         except Exception as e:
             import traceback; traceback.print_exc()
             self.send_error_json(f"Error: {e}", 500)
+
+
+    # ── LOOKUP BARCODE (Open Food Facts) ───────────────────────────
+    def _lookup_barcode(self, barcode):
+        OFF_CATS = {
+            'en:beverages':'Bebidas','en:drinks':'Bebidas','en:sodas':'Bebidas',
+            'en:waters':'Bebidas','en:juices':'Bebidas','en:coffees':'Bebidas',
+            'en:dairy':'Lácteos','en:milks':'Lácteos','en:cheeses':'Lácteos',
+            'en:yogurts':'Lácteos',
+            'en:cereals-and-their-products':'Granos','en:rice':'Granos',
+            'en:legumes':'Granos','en:pastas':'Granos','en:flours':'Granos',
+            'en:oatmeals':'Granos',
+            'en:oils-and-fats':'Aceites','en:cooking-oils':'Aceites',
+            'en:canned-foods':'Enlatados','en:canned-fish':'Enlatados',
+            'en:canned-vegetables':'Enlatados',
+            'en:snacks':'Dulces','en:chocolates':'Dulces',
+            'en:candies':'Dulces','en:biscuits':'Dulces','en:cookies':'Dulces',
+            'en:cleaning-products':'Aseo','en:hygiene':'Aseo',
+            'en:fresh-foods':'Frescos','en:eggs':'Frescos','en:meats':'Frescos',
+            'en:condiments':'Condimentos','en:sauces':'Condimentos',
+            'en:spices':'Condimentos','en:salts':'Condimentos',
+        }
+        CAT_EMOJIS = {
+            'Bebidas':'🥤','Lácteos':'🥛','Granos':'🌾','Aceites':'🛢️',
+            'Enlatados':'🥫','Dulces':'🍬','Aseo':'🧼','Frescos':'🥚',
+            'Condimentos':'🧂','Otro':'📦',
+        }
+        try:
+            url = f"https://world.openfoodfacts.org/api/v2/product/{barcode}?fields=product_name,product_name_es,categories_tags,image_front_small_url,brands,quantity"
+            req = urllib.request.Request(url, headers={"User-Agent": "POS-MiniMercado/1.0"})
+            with urllib.request.urlopen(req, timeout=6) as r:
+                data = json.loads(r.read())
+
+            if data.get("status") != 1:
+                self.send_json({"found": False}); return
+
+            p = data["product"]
+            name = (p.get("product_name_es") or p.get("product_name") or "").strip()
+            brand = p.get("brands","").split(",")[0].strip()
+            qty   = p.get("quantity","").strip()
+            if brand and brand.lower() not in name.lower():
+                name = f"{name} {brand}".strip() if name else brand
+            if qty and qty not in name:
+                name = f"{name} {qty}".strip()
+
+            # Categoría
+            tags = p.get("categories_tags", [])
+            cat  = "Otro"
+            for tag in tags:
+                if tag in OFF_CATS:
+                    cat = OFF_CATS[tag]; break
+
+            emoji = CAT_EMOJIS.get(cat, "📦")
+
+            # Miniatura
+            thumbnail = None
+            img_url = p.get("image_front_small_url","")
+            if img_url:
+                try:
+                    with urllib.request.urlopen(img_url, timeout=5) as ir:
+                        img_bytes = ir.read()
+                    if REMBG_AVAILABLE:
+                        img = Image.open(io.BytesIO(img_bytes)).convert("RGBA")
+                    else:
+                        img = Image.open(io.BytesIO(img_bytes)).convert("RGB")
+                    img.thumbnail((128, 128), Image.LANCZOS)
+                    buf = io.BytesIO()
+                    fmt_save = "PNG" if REMBG_AVAILABLE else "JPEG"
+                    img.save(buf, format=fmt_save, quality=85)
+                    mt = "image/png" if REMBG_AVAILABLE else "image/jpeg"
+                    thumbnail = f"data:{mt};base64,{base64.b64encode(buf.getvalue()).decode()}"
+                except Exception:
+                    pass
+
+            self.send_json({
+                "found": True,
+                "product": {
+                    "name": name or "Producto sin nombre",
+                    "cat": cat,
+                    "emoji": emoji,
+                    "barcode": barcode,
+                    "thumbnail": thumbnail,
+                }
+            })
+        except urllib.error.URLError:
+            self.send_json({"found": False, "error": "Sin conexión a Open Food Facts"})
+        except Exception as e:
+            self.send_json({"found": False, "error": str(e)})
 
 
 # ─── INICIO ────────────────────────────────────────────────────────
