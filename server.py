@@ -34,11 +34,68 @@ except Exception as _rembg_err:
     print(f"⚠  rembg no disponible: {_rembg_err}")
 
 ANTHROPIC_API_KEY = os.environ.get("ANTHROPIC_API_KEY", "")
+TURSO_URL         = os.environ.get("TURSO_URL", "")
+TURSO_TOKEN       = os.environ.get("TURSO_TOKEN", "")
 BASE_DIR = Path(__file__).parent
-# En cloud usar /data (Railway Volume); en local usar el directorio del proyecto
-_data_dir = Path(os.environ.get("DATA_DIR", "/data" if os.environ.get("RAILWAY_ENVIRONMENT") else str(BASE_DIR)))
-_data_dir.mkdir(parents=True, exist_ok=True)
-DB_PATH = _data_dir / "pos.db"
+DB_PATH  = BASE_DIR / "pos.db"  # solo se usa en local
+
+# ── Turso (SQLite en la nube) ───────────────────────────────────────
+try:
+    import libsql_experimental as _libsql
+    _LIBSQL_OK = True
+except Exception:
+    _LIBSQL_OK = False
+
+USE_TURSO = _LIBSQL_OK and bool(TURSO_URL) and bool(TURSO_TOKEN)
+
+class _DCursor:
+    """Cursor wrapper que devuelve dicts en lugar de tuplas."""
+    def __init__(self, cur):
+        self._c = cur
+        self.lastrowid = getattr(cur, 'lastrowid', None)
+
+    def _cols(self):
+        d = getattr(self._c, 'description', None)
+        return [x[0] for x in d] if d else []
+
+    def _row(self, row):
+        if row is None: return None
+        cols = self._cols()
+        return {cols[i]: row[i] for i in range(len(cols))} if cols else row
+
+    def execute(self, sql, params=()):
+        self._c.execute(sql, params)
+        self.lastrowid = getattr(self._c, 'lastrowid', None)
+        return self
+
+    def fetchone(self):  return self._row(self._c.fetchone())
+    def fetchall(self):  return [self._row(r) for r in self._c.fetchall()]
+    def __iter__(self):  return (self._row(r) for r in self._c.fetchall())
+
+class _TursoConn:
+    """Conexión Turso compatible con la API de sqlite3 que usa el servidor."""
+    def __init__(self):
+        url = TURSO_URL.replace('libsql://', '')
+        self._conn = _libsql.connect(url, auth_token=TURSO_TOKEN)
+
+    def cursor(self):
+        return _DCursor(self._conn.cursor())
+
+    def execute(self, sql, params=()):
+        cur = self._conn.execute(sql, params if params else ())
+        dc = _DCursor(cur)
+        return dc
+
+    def executemany(self, sql, seq):
+        self._conn.executemany(sql, seq)
+
+    def executescript(self, script):
+        for stmt in [s.strip() for s in script.split(';') if s.strip()]:
+            self._conn.execute(stmt)
+        self._conn.commit()
+
+    def commit(self):  self._conn.commit()
+    def close(self):   self._conn.close()
 
 PRODUCTOS_INICIALES = [
     ('🍚', 'Arroz 500g',         '7702001001001', 'Granos',      2100,  48, 10),
@@ -67,6 +124,8 @@ PRODUCTOS_INICIALES = [
 # ─── BASE DE DATOS ─────────────────────────────────────────────────
 
 def get_db():
+    if USE_TURSO:
+        return _TursoConn()
     conn = sqlite3.connect(str(DB_PATH))
     conn.row_factory = sqlite3.Row
     return conn
@@ -617,7 +676,7 @@ if __name__ == "__main__":
   ║  Entorno: {'☁  Cloud' if IS_CLOUD else '🏠 Local'}{'                      ' if IS_CLOUD else '                       '}║
   ║  {proto}://{'0.0.0.0' if IS_CLOUD else 'localhost'}:{port}{'           ' if IS_CLOUD else '            '}║
   ║                                          ║
-  ║  Base de datos: SQLite ({DB_PATH.name}){'  ' if len(DB_PATH.name)<8 else ''}║
+  ║  Base de datos: {'Turso ☁' if USE_TURSO else f'SQLite ({DB_PATH.name})'}{'       ' if USE_TURSO else ('  ' if len(DB_PATH.name)<8 else '')}║
   ║  IA: {'✅ Configurada' if ANTHROPIC_API_KEY else '⚠  Falta ANTHROPIC_API_KEY'}{'                 ' if ANTHROPIC_API_KEY else '        '}║
   ╚══════════════════════════════════════════╝
 """)

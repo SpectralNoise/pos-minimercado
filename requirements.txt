@@ -1,3 +1,4 @@
 anthropic
 rembg[cpu]
 Pillow
+libsql-experimental
