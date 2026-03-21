@@ -446,8 +446,10 @@ class Handler(BaseHTTPRequestHandler):
             conn = get_db()
             c = conn.cursor()
             c.execute(
-                "INSERT INTO ventas (total, metodo, recibido) VALUES (?,?,?)",
-                (body["total"], body.get("metodo","efectivo"), body.get("recibido", body["total"]))
+                "INSERT INTO ventas (total, metodo, recibido, turno_id) VALUES (?,?,?,?)",
+                (body["total"], body.get("metodo","efectivo"),
+                 body.get("recibido", body["total"]),
+                 body.get("turno_id"))   # None if no active shift
             )
             venta_id = c.lastrowid
             for item in body.get("items", []):
