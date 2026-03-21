@@ -1132,6 +1132,7 @@ table.inv-table {
         <input type="text" id="inv-search" placeholder="Buscar producto..." autocomplete="off">
       </div>
       <button class="btn-secondary" onclick="exportCSV()">⬇ CSV</button>
+      <button class="btn-secondary" id="btn-pedido" onclick="generarPedido()" title="IA sugiere qué pedir esta semana">🛒 ¿Qué pedir?</button>
       <button class="btn-primary" onclick="openProdModal()">+ Nuevo</button>
     </div>
     <div class="inv-stats">
@@ -1148,6 +1149,9 @@ table.inv-table {
         <div><div class="sc-label">Valor inventario</div><div class="sc-val" id="stat-val" style="font-size:15px">$0</div></div>
       </div>
     </div>
+    <!-- Alertas sin rotación -->
+    <div id="sinrot-alert" style="display:none;margin:0 0 12px;padding:10px 14px;background:rgba(245,158,11,.08);border:1px solid rgba(245,158,11,.25);border-radius:var(--r-md);font-size:13px;color:var(--warn)"></div>
+
     <div class="inv-table-wrap">
       <table class="inv-table">
         <thead>
@@ -1156,7 +1160,7 @@ table.inv-table {
             <th>Categoría</th>
             <th class="right">Precio venta</th>
             <th class="right">Stock</th>
-            <th class="right">Alerta</th>
+            <th class="right">Días</th>
             <th class="right">Acciones</th>
           </tr>
         </thead>
@@ -1406,6 +1410,19 @@ table.inv-table {
   </div>
 </div>
 
+<!-- MODAL: PEDIDO IA -->
+<div class="modal-overlay" id="modal-pedido">
+  <div class="modal" style="max-width:500px">
+    <div class="modal-header">
+      <h2>🛒 Lista de pedido sugerida</h2>
+      <button class="btn-close" onclick="closeModal('modal-pedido')">✕</button>
+    </div>
+    <div style="padding:20px 24px">
+      <div id="pedido-ia-texto" style="font-size:14px;line-height:1.7;color:var(--text);white-space:pre-wrap;min-height:80px"></div>
+    </div>
+  </div>
+</div>
+
 <!-- OVERLAY: CÁMARA SCANNER -->
 <div class="cam-overlay" id="cam-overlay">
   <div class="cam-header-bar">
@@ -1469,7 +1486,7 @@ function normalizarVenta(v) {
     recibido: v.recibido ?? v.total,
     cambio:   (v.recibido ?? v.total) - v.total,
     date:     new Date((v.created_at || '').replace(' ', 'T')),
-    items:    (v.items || []).map(i => ({ name: i.name, emoji: i.emoji, qty: i.qty, price: i.price }))
+    items:    (v.items || []).map(i => ({ id: i.producto_id, name: i.name, emoji: i.emoji, qty: i.qty, price: i.price }))
   };
 }
 
@@ -1822,7 +1839,8 @@ function _applyMeliPrice(ps) {
     hint.style.cssText = 'font-size:11px;color:var(--text-2);margin-top:4px;font-family:var(--ff-mono);padding:4px 8px;background:var(--surf-2);border-radius:6px;border:1px solid var(--border)';
     priceEl.parentNode.appendChild(hint);
   }
-  hint.innerHTML = `📊 Mercado Libre Colombia: $${ps.min.toLocaleString('es-CO')} – $${ps.max.toLocaleString('es-CO')} COP <span style="color:var(--text-3)">(${ps.n} ofertas)</span>`;
+  const sugerido = Math.round(ps.medio * 1.30 / 100) * 100; // +30% margen, redondeado a $100
+  hint.innerHTML = `📊 MELI: $${ps.min.toLocaleString('es-CO')} – $${ps.max.toLocaleString('es-CO')} · <strong>Sugerido +30%: $${sugerido.toLocaleString('es-CO')}</strong> <span style="color:var(--text-3)">(${ps.n} ofertas)</span>`;
 }
 
 function _processScan(barcode) {
@@ -2058,6 +2076,17 @@ document.querySelectorAll('.modal-overlay').forEach(m => {
 });
 
 // ─── INVENTARIO ───────────────────────────────
+// Calcula unidades vendidas por día por producto (últimos 30 días)
+function calcVelocidades() {
+  const cutoff = new Date(Date.now() - 30 * 864e5);
+  const vel = {};
+  sales.filter(s => s.date >= cutoff).forEach(s =>
+    s.items.forEach(i => { if (i.id) vel[i.id] = (vel[i.id] || 0) + i.qty; })
+  );
+  Object.keys(vel).forEach(id => vel[id] = vel[id] / 30);
+  return vel;
+}
+
 function renderInventario() {
   const q = document.getElementById('inv-search').value.toLowerCase();
   const filtered = products.filter(p => !q || p.name.toLowerCase().includes(q) || p.barcode.includes(q));
@@ -2072,9 +2101,32 @@ function renderInventario() {
   document.getElementById('stat-out').textContent = out;
   document.getElementById('stat-val').textContent = fmt(val);
 
+  // Velocidades y sin rotación
+  const vel = calcVelocidades();
+  const cutoff15 = new Date(Date.now() - 15 * 864e5);
+  const vendidosRecientes = new Set();
+  sales.filter(s => s.date >= cutoff15).forEach(s =>
+    s.items.forEach(i => { if (i.id) vendidosRecientes.add(i.id); })
+  );
+  const sinRot = products.filter(p => p.stock > 0 && !vendidosRecientes.has(p.id));
+  const sinRotEl = document.getElementById('sinrot-alert');
+  if (sinRot.length && !q) {
+    sinRotEl.style.display = 'block';
+    sinRotEl.textContent = `⚠ Sin rotación (+15 días): ${sinRot.map(p=>p.name).join(', ')}`;
+  } else {
+    sinRotEl.style.display = 'none';
+  }
+
   const tbody = document.getElementById('inv-tbody');
   tbody.innerHTML = filtered.map(p => {
     const sc = p.stock === 0 ? 'stock-out' : p.stock <= p.alert ? 'stock-low' : 'stock-ok';
+    const v  = vel[p.id] || 0;
+    const dias = v > 0 ? Math.round(p.stock / v) : null;
+    const diasTxt = p.stock === 0 ? '<span style="color:var(--danger)">Agotado</span>'
+      : dias === null ? '<span style="color:var(--text-3)">—</span>'
+      : dias <= 3  ? `<span style="color:var(--danger);font-weight:700">${dias}d</span>`
+      : dias <= 7  ? `<span style="color:var(--warn);font-weight:600">${dias}d</span>`
+      : `<span style="color:var(--success)">${dias}d</span>`;
     return `<tr onclick="openProdModal(${p.id})">
       <td><div class="td-name">
         ${p.has_thumbnail ? `<img src="/api/productos/${p.id}/thumbnail" style="width:32px;height:32px;object-fit:contain;border-radius:4px;flex-shrink:0">` : `<span class="t-emoji">${esc(p.emoji)}</span>`}
@@ -2083,13 +2135,52 @@ function renderInventario() {
       <td><span class="td-cat">${esc(p.cat)}</span></td>
       <td class="right"><span class="td-price">${fmt(p.price)}</span></td>
       <td class="right"><span class="stock-badge ${sc}">${p.stock}</span></td>
-      <td class="right" style="color:var(--text-2);font-family:var(--ff-mono);font-size:13px">${p.alert}</td>
+      <td class="right" style="font-family:var(--ff-mono);font-size:13px">${diasTxt}</td>
       <td class="right"><div class="td-actions">
         <button class="btn-icon edit" title="Editar" onclick="event.stopPropagation();openProdModal(${p.id})">✏️</button>
         <button class="btn-icon del" title="Eliminar" onclick="event.stopPropagation();deleteProduct(${p.id})">🗑</button>
       </div></td>
     </tr>`;
   }).join('');
+}
+
+async function generarPedido() {
+  const btn = document.getElementById('btn-pedido');
+  btn.disabled = true; btn.textContent = '⏳ Analizando...';
+
+  const vel = calcVelocidades();
+  const cutoff15 = new Date(Date.now() - 15 * 864e5);
+  const vendidosRecientes = new Set();
+  sales.filter(s => s.date >= cutoff15).forEach(s =>
+    s.items.forEach(i => { if (i.id) vendidosRecientes.add(i.id); })
+  );
+
+  const toItem = p => {
+    const v = vel[p.id] || 0;
+    return { name: p.name, stock: p.stock, dias: v > 0 ? Math.round(p.stock / v) : null };
+  };
+
+  const criticos  = products.filter(p => { const v=vel[p.id]||0; return p.stock>0 && v>0 && p.stock/v < 3; }).map(toItem);
+  const bajos     = products.filter(p => { const v=vel[p.id]||0; return p.stock>0 && v>0 && p.stock/v >= 3 && p.stock/v <= 7; }).map(toItem);
+  const sinRot    = products.filter(p => p.stock > 0 && !vendidosRecientes.has(p.id)).map(p=>({name:p.name,stock:p.stock}));
+  // También incluir agotados con ventas recientes
+  const agotados  = products.filter(p => p.stock===0 && vel[p.id]>0).map(p=>({name:p.name,stock:0,dias:0}));
+
+  document.getElementById('pedido-ia-texto').textContent = '⏳ Generando lista de pedido...';
+  document.getElementById('modal-pedido').classList.add('open');
+
+  try {
+    const res = await fetch('/api/ai-pedido', {
+      method: 'POST', headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({ criticos: [...agotados, ...criticos], bajos, sin_rotacion: sinRot })
+    });
+    const data = await res.json();
+    document.getElementById('pedido-ia-texto').textContent = data.pedido || '—';
+  } catch(e) {
+    document.getElementById('pedido-ia-texto').textContent = '⚠ Error generando la lista.';
+  } finally {
+    btn.disabled = false; btn.textContent = '🛒 ¿Qué pedir?';
+  }
 }
 
 document.getElementById('inv-search').addEventListener('input', renderInventario);

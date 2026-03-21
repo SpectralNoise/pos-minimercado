@@ -319,6 +319,8 @@ class Handler(BaseHTTPRequestHandler):
             self._handle_analyze_product()
         elif self.path == "/api/ai-cierre":
             self._handle_ai_cierre()
+        elif self.path == "/api/ai-pedido":
+            self._handle_ai_pedido()
         else:
             self.send_error_json("Ruta no encontrada", 404)
 
@@ -513,6 +515,50 @@ Sé positivo, menciona el nombre del cajero, y destaca algo interesante de los n
         except Exception as e:
             self.send_error_json(str(e), 500)
 
+
+    # ── PEDIDO INTELIGENTE ─────────────────────────────────────────
+    def _handle_ai_pedido(self):
+        if not AI_AVAILABLE or not ANTHROPIC_API_KEY:
+            self.send_error_json("IA no configurada"); return
+        try:
+            body     = self.read_json_body()
+            criticos = body.get("criticos", [])   # stock < 3 días
+            bajos    = body.get("bajos", [])       # 3-7 días
+            sin_rot  = body.get("sin_rotacion", [])
+
+            def fmt_prod(p):
+                dias = f"{p['dias']} días" if p.get('dias') else "sin ventas"
+                return f"- {p['name']}: stock {p['stock']} uds, velocidad {dias}"
+
+            crit_txt = "\n".join([fmt_prod(p) for p in criticos]) or "ninguno"
+            bajo_txt = "\n".join([fmt_prod(p) for p in bajos])     or "ninguno"
+            rot_txt  = ", ".join([p['name'] for p in sin_rot[:5]]) or "ninguno"
+
+            prompt = f"""Eres el asistente de compras de un mini mercado colombiano.
+Genera una lista de pedido concreta y priorizada en español informal.
+Máximo 8 líneas. Sé directo y práctico.
+
+CRÍTICOS (se acaban en menos de 3 días):
+{crit_txt}
+
+STOCK BAJO (3-7 días):
+{bajo_txt}
+
+Sin rotación (más de 15 días sin venderse):
+{rot_txt}
+
+Para cada producto crítico sugiere una cantidad a pedir (aprox 2 semanas de stock).
+Al final, un consejo breve sobre los productos sin rotación."""
+
+            client = anthropic.Anthropic(api_key=ANTHROPIC_API_KEY)
+            msg = client.messages.create(
+                model="claude-haiku-4-5-20251001",
+                max_tokens=400,
+                messages=[{"role": "user", "content": prompt}]
+            )
+            self.send_json({"ok": True, "pedido": msg.content[0].text.strip()})
+        except Exception as e:
+            self.send_error_json(str(e), 500)
 
     # ── LOOKUP BARCODE (Open Food Facts) ───────────────────────────
     def _lookup_barcode(self, barcode):
