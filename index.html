@@ -1043,7 +1043,32 @@ table.inv-table {
 </style>
 </head>
 <body>
-<div id="app">
+
+<!-- PANTALLA DE LOGIN -->
+<div id="login-screen" style="display:none; position:fixed; inset:0; z-index:9999; background:var(--bg); flex-direction:column; align-items:center; justify-content:center; padding:24px;">
+  <div style="width:100%; max-width:380px;">
+    <div style="text-align:center; margin-bottom:32px;">
+      <div style="font-size:48px; margin-bottom:8px;">🛒</div>
+      <div style="font-family:var(--ff-disp); font-size:32px; font-weight:800; letter-spacing:-.02em; color:var(--text)">SFPOS</div>
+      <div style="font-size:13px; color:var(--text-2); margin-top:4px;">Sistema de Punto de Venta</div>
+    </div>
+    <div style="background:var(--surface); border:1px solid var(--border); border-radius:16px; padding:28px 24px;">
+      <div style="margin-bottom:16px;">
+        <label style="display:block; font-size:12px; font-weight:600; text-transform:uppercase; letter-spacing:.07em; color:var(--text-2); margin-bottom:6px;">Usuario</label>
+        <input type="text" id="login-username" class="form-input" placeholder="Ej: admin" autocomplete="username" autocapitalize="none" style="width:100%; box-sizing:border-box;">
+      </div>
+      <div style="margin-bottom:20px;">
+        <label style="display:block; font-size:12px; font-weight:600; text-transform:uppercase; letter-spacing:.07em; color:var(--text-2); margin-bottom:6px;">Contraseña</label>
+        <input type="password" id="login-password" class="form-input" placeholder="••••••••" autocomplete="current-password" style="width:100%; box-sizing:border-box;">
+      </div>
+      <div id="login-error" style="display:none; color:var(--danger); font-size:13px; margin-bottom:12px; padding:8px 12px; background:var(--danger-bg,#fee2e2); border-radius:8px;"></div>
+      <button id="login-btn" class="btn-cobrar" onclick="doLogin()" style="width:100%;">Ingresar</button>
+    </div>
+    <div style="text-align:center; margin-top:16px; font-size:12px; color:var(--text-3);">SFPOS v1.0 · sfpos.app</div>
+  </div>
+</div>
+
+<div id="app" style="display:none;">
 
   <!-- TOP NAV -->
   <nav id="topnav">
@@ -1496,6 +1521,68 @@ async function apiFetch(url, options = {}) {
     return null;
   }
   return res;
+}
+
+// ─── LOGIN / LOGOUT ─────────────────────────────
+function showLoginScreen(msg = '') {
+  document.getElementById('app').style.display = 'none';
+  document.getElementById('login-screen').style.display = 'flex';
+  const errEl = document.getElementById('login-error');
+  if (msg) { errEl.textContent = msg; errEl.style.display = 'block'; }
+  else { errEl.style.display = 'none'; }
+  document.getElementById('login-username').focus();
+}
+
+async function doLogin() {
+  const username = document.getElementById('login-username').value.trim();
+  const password = document.getElementById('login-password').value;
+  const errEl = document.getElementById('login-error');
+  const btn = document.getElementById('login-btn');
+  errEl.style.display = 'none';
+  if (!username || !password) {
+    errEl.textContent = 'Ingresa usuario y contraseña'; errEl.style.display = 'block'; return;
+  }
+  btn.disabled = true; btn.textContent = 'Ingresando...';
+  try {
+    const res = await fetch('/api/auth/login', {
+      method: 'POST',
+      headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({username, password})
+    });
+    const data = await res.json();
+    if (!res.ok) {
+      errEl.textContent = data.error || 'Credenciales incorrectas';
+      errEl.style.display = 'block'; return;
+    }
+    localStorage.setItem('sfpos_token',  data.token);
+    localStorage.setItem('sfpos_exp',    String(data.exp));
+    localStorage.setItem('sfpos_user',   JSON.stringify(data.user));
+    localStorage.setItem('sfpos_tienda', JSON.stringify(data.tienda));
+    await iniciarApp(data.user, data.tienda);
+  } catch(e) {
+    errEl.textContent = 'Error de conexión'; errEl.style.display = 'block';
+  } finally {
+    btn.disabled = false; btn.textContent = 'Ingresar';
+  }
+}
+
+// Enter en campos de login dispara doLogin
+document.getElementById('login-password').addEventListener('keydown', e => {
+  if (e.key === 'Enter') doLogin();
+});
+document.getElementById('login-username').addEventListener('keydown', e => {
+  if (e.key === 'Enter') document.getElementById('login-password').focus();
+});
+
+function doLogout() {
+  if (cajaSession) { showToast('⚠ Cierra la caja antes de cerrar sesión'); return; }
+  if (!confirm('¿Cerrar sesión?')) return;
+  if (_expiryCheckInterval) { clearInterval(_expiryCheckInterval); _expiryCheckInterval = null; }
+  const banner = document.getElementById('session-expiry-banner');
+  if (banner) banner.style.display = 'none';
+  ['sfpos_token','sfpos_exp','sfpos_user','sfpos_tienda'].forEach(k => localStorage.removeItem(k));
+  currentUser = null;
+  showLoginScreen();
 }
 
 // ─── DATOS (cargados desde API) ─────────────────
