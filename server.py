@@ -328,6 +328,88 @@ class Handler(BaseHTTPRequestHandler):
         sig = _hmac.new(SECRET_KEY.encode(), payload.encode(), hashlib.sha256).hexdigest()
         return f"{payload_b64}.{sig}", exp
 
+    def _auth_login(self):
+        try:
+            body = self.read_json_body()
+            username = body.get("username", "").strip().lower()
+            password = body.get("password", "")
+            if not username or not password:
+                self.send_error_json("Faltan credenciales", 400); return
+            conn = get_db()
+            try:
+                # Superadmin: tienda_id IS NULL
+                user = conn.execute(
+                    "SELECT * FROM usuarios WHERE username=? AND tienda_id IS NULL", (username,)
+                ).fetchone()
+                if not user:
+                    # Usuario de tienda — la constraint es UNIQUE(tienda_id, username),
+                    # por lo que dos tiendas pueden tener el mismo username. En esta fase,
+                    # el login no tiene selector de tienda, así que se toma el primer match.
+                    # En producción, los admins deben asegurar usernames globalmente únicos
+                    # para evitar ambigüedad. Se selecciona el primer resultado por created_at.
+                    user = conn.execute(
+                        "SELECT * FROM usuarios WHERE username=? AND tienda_id IS NOT NULL ORDER BY created_at ASC LIMIT 1",
+                        (username,)
+                    ).fetchone()
+                if not user:
+                    self.send_error_json("Credenciales incorrectas", 401); return
+                if not user["activo"]:
+                    self.send_error_json("Usuario inactivo", 401); return
+                expected_hash = _hash_password(password, user["salt"])
+                if not _hmac.compare_digest(expected_hash, user["password_hash"]):
+                    self.send_error_json("Credenciales incorrectas", 401); return
+                # Verificar tienda activa (si aplica)
+                tienda = None
+                if user["tienda_id"] is not None:
+                    tienda_row = conn.execute("SELECT * FROM tiendas WHERE id=?", (user["tienda_id"],)).fetchone()
+                    if not tienda_row or not tienda_row["activo"]:
+                        self.send_error_json("Tienda inactiva", 401); return
+                    tienda = {"id": tienda_row["id"], "nombre": tienda_row["nombre"], "slug": tienda_row["slug"]}
+                token, exp = self._make_token(user["id"], user["tienda_id"], user["rol"])
+                self.send_json({
+                    "token": token,
+                    "exp": exp,
+                    "user": {
+                        "id": user["id"],
+                        "nombre": user["nombre"],
+                        "username": user["username"],
+                        "rol": user["rol"],
+                        "tienda_id": user["tienda_id"]
+                    },
+                    "tienda": tienda
+                })
+            finally:
+                conn.close()
+        except Exception as e:
+            self.send_error_json(str(e), 500)
+
+    def _auth_me(self):
+        ctx = self.require_auth()
+        if not ctx: return
+        try:
+            conn = get_db()
+            try:
+                user = conn.execute("SELECT * FROM usuarios WHERE id=?", (ctx.user_id,)).fetchone()
+                tienda = None
+                if ctx.tienda_id is not None:
+                    t = conn.execute("SELECT * FROM tiendas WHERE id=?", (ctx.tienda_id,)).fetchone()
+                    if t:
+                        tienda = {"id": t["id"], "nombre": t["nombre"], "slug": t["slug"]}
+                self.send_json({
+                    "user": {
+                        "id": user["id"],
+                        "nombre": user["nombre"],
+                        "username": user["username"],
+                        "rol": user["rol"],
+                        "tienda_id": user["tienda_id"]
+                    },
+                    "tienda": tienda
+                })
+            finally:
+                conn.close()
+        except Exception as e:
+            self.send_error_json(str(e), 500)
+
     def read_json_body(self):
         length = int(self.headers.get("Content-Length", 0))
         data = b""
@@ -352,6 +434,8 @@ class Handler(BaseHTTPRequestHandler):
             self._serve_file(BASE_DIR / "index.html", "text/html")
         elif path == "/api/status":
             self.send_json({"db": "turso" if USE_TURSO else "sqlite", "turso_url": bool(TURSO_URL), "libsql_ok": _LIBSQL_OK})
+        elif path == "/api/auth/me":
+            self._auth_me()
         elif path == "/api/productos":
             conn = get_db()
             try:
@@ -447,7 +531,9 @@ class Handler(BaseHTTPRequestHandler):
 
     # ── POST ───────────────────────────────────────────────────────
     def do_POST(self):
-        if self.path == "/api/productos":
+        if self.path == "/api/auth/login":
+            self._auth_login(); return
+        elif self.path == "/api/productos":
             self._create_producto()
         elif self.path == "/api/ventas":
             self._create_venta()
