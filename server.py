@@ -193,6 +193,27 @@ def init_db():
             num_tx           INTEGER  DEFAULT 0,
             resumen_ia       TEXT     DEFAULT NULL
         );
+        CREATE TABLE IF NOT EXISTS tiendas (
+            id         INTEGER PRIMARY KEY AUTOINCREMENT,
+            nombre     TEXT    NOT NULL,
+            slug       TEXT    NOT NULL UNIQUE,
+            plan       TEXT    DEFAULT 'basico',
+            activo     INTEGER DEFAULT 1,
+            created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+        );
+        CREATE TABLE IF NOT EXISTS usuarios (
+            id            INTEGER PRIMARY KEY AUTOINCREMENT,
+            tienda_id     INTEGER REFERENCES tiendas(id) ON DELETE RESTRICT,
+            nombre        TEXT    NOT NULL,
+            username      TEXT    NOT NULL,
+            password_hash TEXT    NOT NULL,
+            salt          TEXT    NOT NULL,
+            rol           TEXT    NOT NULL DEFAULT 'cajero'
+                          CHECK (rol IN ('superadmin','admin','cajero')),
+            activo        INTEGER DEFAULT 1,
+            created_at    DATETIME DEFAULT CURRENT_TIMESTAMP,
+            UNIQUE (tienda_id, username)
+        );
     """)
     # Migración: añadir thumbnail si no existe
     try:
@@ -208,6 +229,28 @@ def init_db():
     except (sqlite3.OperationalError, ValueError) as e:
         if "duplicate column name" not in str(e):
             raise
+    # Migración: añadir tienda_id a productos, ventas, turnos
+    for table in ('productos', 'ventas', 'turnos'):
+        try:
+            conn.execute(f"ALTER TABLE {table} ADD COLUMN tienda_id INTEGER REFERENCES tiendas(id)")
+            conn.commit()
+        except (sqlite3.OperationalError, ValueError) as e:
+            if "duplicate column name" not in str(e):
+                raise
+    # Seed superadmin (solo si no hay usuarios)
+    if conn.execute("SELECT COUNT(*) FROM usuarios").fetchone()[0] == 0:
+        _pw = secrets.token_urlsafe(12)
+        _salt = secrets.token_hex(16)
+        _hash = hashlib.pbkdf2_hmac('sha256', _pw.encode(), _salt.encode(), 260000).hex()
+        conn.execute(
+            "INSERT INTO usuarios (tienda_id, nombre, username, password_hash, salt, rol) VALUES (?,?,?,?,?,?)",
+            (None, "Super Admin", "admin", _hash, _salt, "superadmin")
+        )
+        conn.commit()
+        print(f"\n  [SFPOS] ✅ Superadmin creado")
+        print(f"  [SFPOS]    Usuario:    admin")
+        print(f"  [SFPOS]    Contraseña: {_pw}")
+        print(f"  [SFPOS]    ⚠  Guarda esta contraseña — no se volverá a mostrar.\n")
     if conn.execute("SELECT COUNT(*) FROM productos").fetchone()[0] == 0:
         conn.executemany(
             "INSERT INTO productos (emoji,name,barcode,cat,price,stock,alert) VALUES (?,?,?,?,?,?,?)",
@@ -218,6 +261,10 @@ def init_db():
 
 def row_to_dict(row):
     return dict(row)
+
+
+def _hash_password(password: str, salt: str) -> str:
+    return hashlib.pbkdf2_hmac('sha256', password.encode(), salt.encode(), 260000).hex()
 
 
 # ─── SERVIDOR HTTP ─────────────────────────────────────────────────
