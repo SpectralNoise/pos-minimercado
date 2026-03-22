@@ -1146,6 +1146,7 @@ table.inv-table {
       </div>
       <button class="btn-secondary" onclick="exportCSV()">⬇ CSV</button>
       <button class="btn-secondary" id="btn-pedido" onclick="generarPedido()" title="IA sugiere qué pedir esta semana">🛒 ¿Qué pedir?</button>
+      <button class="btn-secondary" id="btn-refresh-inv" onclick="recargarInventario()" title="Actualizar inventario">🔄</button>
       <button class="btn-primary" onclick="openProdModal()">+ Nuevo</button>
     </div>
     <div class="inv-stats">
@@ -2232,6 +2233,22 @@ function calcVelocidades() {
   );
   Object.keys(vel).forEach(id => vel[id] = vel[id] / 30);
   return vel;
+}
+
+async function recargarInventario() {
+  const btn = document.getElementById('btn-refresh-inv');
+  if (btn) btn.disabled = true;
+  try {
+    const res = await fetch('/api/productos');
+    if (!res.ok) { showToast('⚠ Error al actualizar'); return; }
+    products = await res.json();
+    renderInventario();
+    showToast('✅ Inventario actualizado');
+  } catch (e) {
+    showToast('⚠ Error de red');
+  } finally {
+    if (btn) btn.disabled = false;
+  }
 }
 
 function renderInventario() {
