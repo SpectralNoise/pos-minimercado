@@ -28,72 +28,138 @@ CREATE TABLE IF NOT EXISTS tiendas (
 ```sql
 CREATE TABLE IF NOT EXISTS usuarios (
     id            INTEGER PRIMARY KEY AUTOINCREMENT,
-    tienda_id     INTEGER REFERENCES tiendas(id),  -- NULL = superadmin de plataforma
+    tienda_id     INTEGER REFERENCES tiendas(id) ON DELETE RESTRICT,
     nombre        TEXT    NOT NULL,
-    username      TEXT    NOT NULL UNIQUE,
+    username      TEXT    NOT NULL,
     password_hash TEXT    NOT NULL,
     salt          TEXT    NOT NULL,
-    rol           TEXT    NOT NULL DEFAULT 'cajero',  -- 'superadmin' | 'admin' | 'cajero'
+    rol           TEXT    NOT NULL DEFAULT 'cajero'
+                          CHECK (rol IN ('superadmin','admin','cajero')),
     activo        INTEGER DEFAULT 1,
-    created_at    DATETIME DEFAULT CURRENT_TIMESTAMP
+    created_at    DATETIME DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE (tienda_id, username)  -- usernames únicos por tienda, no globalmente
 );
 ```
 
 **Notas:**
-- `tienda_id = NULL` identifica al superadmin de plataforma.
-- `username` es único globalmente.
-- `password_hash = SHA-256(salt + password)` con sal aleatoria de 16 bytes hex.
-
-### Migraciones en tablas existentes
-
-Agregar `tienda_id INTEGER` a:
-- `productos`
-- `ventas`
-- `turnos`
-
-Los registros existentes quedan con `tienda_id = NULL`. El superadmin los puede ver; los admins de tienda no.
+- `tienda_id = NULL` identifica al superadmin de plataforma (única excepción).
+- `username` es único **dentro de cada tienda** — dos tiendas pueden tener su propio `cajero1`.
+- El superadmin (`tienda_id = NULL`) es el único usuario global; su username sigue siendo único en la tabla porque NULL no viola la constraint `UNIQUE(tienda_id, username)` en SQLite (NULLs no se comparan). Para evitar ambigüedad, el servidor debe verificar `WHERE tienda_id IS NULL AND username = ?` explícitamente en el login del superadmin.
+- `password_hash = PBKDF2-HMAC-SHA256(password, salt, iterations=260000)` usando `hashlib.pbkdf2_hmac`. La sal es aleatoria de 16 bytes hex.
+- `ON DELETE RESTRICT` en `tienda_id` previene borrar una tienda con usuarios activos.
 
 ### Usuario inicial (seed)
 
-Al inicializar la DB, si `usuarios` está vacía:
+Al inicializar la DB, si `usuarios` está vacía, se inserta el superadmin con una contraseña generada aleatoriamente:
 
 ```python
-INSERT INTO usuarios (tienda_id, nombre, username, password_hash, salt, rol)
-VALUES (NULL, 'Super Admin', 'admin', <hash('sfpos1234')>, <salt>, 'superadmin')
+import secrets, hashlib
+default_password = secrets.token_urlsafe(12)   # ej: "Xk9mP2vQrL4n"
+salt = secrets.token_hex(16)
+password_hash = hashlib.pbkdf2_hmac('sha256', default_password.encode(), salt.encode(), 260000).hex()
+print(f"[SFPOS] Contraseña inicial del superadmin: {default_password}")
+# INSERT INTO usuarios (tienda_id, nombre, username, password_hash, salt, rol)
+# VALUES (NULL, 'Super Admin', 'admin', <password_hash>, <salt>, 'superadmin')
 ```
+
+La contraseña se imprime **una sola vez** en los logs del servidor al primer arranque. No se documenta en el código fuente ni en el spec.
+
+### Migraciones en tablas existentes
+
+Agregar `tienda_id INTEGER` a `productos`, `ventas` y `turnos` usando el patrón `ALTER TABLE ... ADD COLUMN` ya establecido en `init_db()`:
+
+```python
+for table in ('productos', 'ventas', 'turnos'):
+    try:
+        conn.execute(f"ALTER TABLE {table} ADD COLUMN tienda_id INTEGER REFERENCES tiendas(id)")
+        conn.commit()
+    except (sqlite3.OperationalError, ValueError) as e:
+        if "duplicate column name" not in str(e):
+            raise
+```
+
+Los registros existentes quedan con `tienda_id = NULL`. El superadmin los ve (no filtra por tienda). Los admins de tienda no los ven.
+
+**`items_venta` no necesita `tienda_id`** — su aislamiento viene del JOIN con `ventas`, que sí tiene `tienda_id`.
 
 ---
 
 ## Autenticación — Tokens HMAC
 
+### `SECRET_KEY`
+
+Requerida como env var `SECRET_KEY` en Railway. Si no está configurada, el servidor **falla al arrancar** con un mensaje claro:
+
+```python
+SECRET_KEY = os.environ.get("SECRET_KEY", "")
+if not SECRET_KEY:
+    raise RuntimeError("[SFPOS] SECRET_KEY no configurada. Agrega esta env var en Railway.")
+```
+
 ### Generación (POST /api/auth/login)
 
 ```
-payload = f"{user_id}:{tienda_id}:{rol}:{exp_timestamp}"
-signature = HMAC-SHA256(SECRET_KEY, payload)
-token = base64(payload) + "." + hex(signature)
+exp = int(time.time()) + 43200  # 12 horas
+tienda_str = str(user.tienda_id) if user.tienda_id is not None else "null"
+payload = f"{user.id}:{tienda_str}:{user.rol}:{exp}"
+payload_b64 = base64.b64encode(payload.encode()).decode()
+signature = hmac.new(SECRET_KEY.encode(), payload.encode(), hashlib.sha256).hexdigest()
+token = f"{payload_b64}.{signature}"
 ```
 
-- `exp_timestamp` = `now + 43200` segundos (12 horas)
-- `SECRET_KEY` leída de env var `SECRET_KEY`. Si no está configurada, se genera una aleatoria en cada arranque del servidor (las sesiones no sobreviven reinicios del servidor).
+La serialización de `tienda_id = None` como la cadena literal `"null"` es explícita e intencional. La deserialización convierte `"null"` → Python `None`.
+
+La respuesta incluye `exp` para que el cliente pueda hacer la verificación local de expiración:
+
+```json
+{
+  "token": "...",
+  "exp": 1234567890,
+  "user": {"id": 1, "nombre": "María", "username": "maria", "rol": "cajero", "tienda_id": 2},
+  "tienda": {"id": 2, "nombre": "Minimercado La 45", "slug": "la-45"}
+}
+```
 
 ### Validación (middleware en cada endpoint protegido)
 
-1. Leer header `Authorization: Bearer <token>`
-2. Separar `payload_b64` y `signature`
-3. Recompute HMAC con `SECRET_KEY` — si no coincide → 401
-4. Decodificar payload → extraer `user_id`, `tienda_id`, `rol`, `exp`
-5. Si `exp < now` → 401 `{"error": "Sesión expirada"}`
-6. Retornar `AuthContext(user_id, tienda_id, rol)`
-
-### Función helper en server.py
-
 ```python
 def require_auth(self) -> AuthContext | None:
-    """Lee y valida el token. Retorna AuthContext o envía 401 y retorna None."""
+    header = self.headers.get("Authorization", "")
+    if not header.startswith("Bearer "):
+        self.send_json({"error": "No autenticado"}, 401); return None
+    token = header[7:]
+    try:
+        payload_b64, signature = token.rsplit(".", 1)
+        payload = base64.b64decode(payload_b64).decode()
+        expected = hmac.new(SECRET_KEY.encode(), payload.encode(), hashlib.sha256).hexdigest()
+        if not hmac.compare_digest(expected, signature):
+            self.send_json({"error": "Token inválido"}, 401); return None
+        user_id, tienda_str, rol, exp = payload.split(":")
+        if int(exp) < time.time():
+            self.send_json({"error": "Sesión expirada"}, 401); return None
+        tienda_id = None if tienda_str == "null" else int(tienda_str)
+        # Verificar usuario activo (DB lookup) y tienda activa
+        conn = get_db()
+        user_row = conn.execute("SELECT activo FROM usuarios WHERE id=?", (int(user_id),)).fetchone()
+        if not user_row or not user_row["activo"]:
+            conn.close(); self.send_json({"error": "Usuario inactivo"}, 401); return None
+        if tienda_id is not None:
+            tienda_row = conn.execute("SELECT activo FROM tiendas WHERE id=?", (tienda_id,)).fetchone()
+            if not tienda_row or not tienda_row["activo"]:
+                conn.close(); self.send_json({"error": "Tienda inactiva"}, 401); return None
+        conn.close()
+        return AuthContext(int(user_id), tienda_id, rol)
+    except Exception:
+        self.send_json({"error": "Token inválido"}, 401); return None
 ```
 
-Todos los endpoints protegidos llaman `ctx = self.require_auth()` al inicio. Si retorna `None`, el handler retorna inmediatamente (ya se envió el 401).
+El lookup de `activo` en cada request es necesario para que la desactivación de un usuario o tienda sea efectiva de inmediato, sin esperar a que expire el token. El costo de una query adicional en Turso es aceptable para la escala de un mini mercado.
+
+### Token expiry y tablets
+
+Los tokens expiran en 12 horas. Para tablets en turno continuo, el frontend detecta que faltan menos de 60 minutos para expirar (leyendo `exp` de localStorage) y hace un refresh silencioso llamando a `POST /api/auth/login` con las credenciales guardadas. **Las credenciales no se guardan en localStorage por seguridad** — cuando el token está próximo a expirar, se muestra un modal de reingreso de contraseña.
+
+**Limitación conocida:** Si el cajero no responde al modal de reingreso, la sesión expira y debe loguearse de nuevo. El turno de caja permanece abierto en el servidor hasta que se cierre explícitamente.
 
 ---
 
@@ -104,140 +170,185 @@ Todos los endpoints protegidos llaman `ctx = self.require_auth()` al inicio. Si 
 | Método | Ruta | Descripción |
 |--------|------|-------------|
 | POST | `/api/auth/login` | Login con username + password |
-| GET | `/api/auth/me` | Valida token y retorna user+tienda |
 
 **POST /api/auth/login** — body: `{username, password}`
 
-Respuesta 200:
+Respuesta 200: ver estructura en sección de tokens arriba.
+- 401 si credenciales incorrectas o usuario/tienda inactivos.
+- Sin rate limiting implementado (limitación conocida — Railway no provee middleware de rate limiting nativo para Python http.server; se acepta el riesgo para esta fase).
+
+### Protegidos — Requieren token válido
+
+| Método | Ruta | Roles permitidos | Descripción |
+|--------|------|-----------------|-------------|
+| GET | `/api/auth/me` | todos | Valida token, retorna user+tienda |
+| GET | `/api/tiendas` | superadmin | Listar tiendas con conteo de usuarios |
+| POST | `/api/tiendas` | superadmin | Crear tienda |
+| PUT | `/api/tiendas/:id` | superadmin | Editar tienda (nombre, plan, activo) |
+| GET | `/api/tiendas/:id/usuarios` | superadmin | Usuarios de una tienda |
+| POST | `/api/tiendas/:id/usuarios` | superadmin | Crear usuario en una tienda (cualquier rol) |
+| GET | `/api/usuarios` | admin, superadmin | Usuarios de mi tienda |
+| POST | `/api/usuarios` | admin | Crear usuario en mi tienda (rol: admin o cajero) |
+| PUT | `/api/usuarios/:id` | admin, superadmin | Editar nombre/activo. Ver restricciones abajo. |
+| PUT | `/api/usuarios/:id/password` | admin, superadmin | Cambiar contraseña |
+
+**Restricciones en `PUT /api/usuarios/:id`:**
+- El servidor rechaza cualquier intento de cambiar `rol` a `superadmin` si `ctx.rol != 'superadmin'` → 403.
+- El servidor rechaza modificar un usuario que pertenece a una tienda diferente a `ctx.tienda_id` (excepto superadmin) → 403.
+- Un usuario no puede cambiar su propio `rol` vía este endpoint (previene auto-escalación) → 403 si `body.id == ctx.user_id && 'rol' in body`.
+
+**`GET /api/tiendas`** retorna:
 ```json
-{
-  "token": "...",
-  "user": {"id": 1, "nombre": "María", "username": "maria", "rol": "cajero"},
-  "tienda": {"id": 2, "nombre": "Minimercado La 45", "slug": "la-45"} // null si superadmin
-}
+[{"id":1,"nombre":"...","slug":"...","plan":"...","activo":1,"created_at":"...","num_usuarios":3}]
 ```
-- 401 si credenciales incorrectas o usuario inactivo.
+El conteo de usuarios se obtiene con `SELECT COUNT(*) FROM usuarios WHERE tienda_id=?`.
 
-**GET /api/auth/me** — requiere token
+### Endpoints existentes modificados
 
-Retorna el mismo objeto `{user, tienda}` sin el token. Útil para restaurar sesión al recargar.
+Todos los handlers de `productos`, `ventas`, `turnos` ahora llaman `require_auth()` al inicio. Handlers afectados:
 
-### Protegidos — Gestión de tiendas (solo superadmin)
+| Handler | Cambio |
+|---------|--------|
+| `_list_productos` | `WHERE tienda_id = ctx.tienda_id` (superadmin: sin filtro) |
+| `_create_producto` | `INSERT` incluye `tienda_id = ctx.tienda_id` |
+| `_update_producto` | `WHERE id=? AND tienda_id=?` (superadmin: solo `WHERE id=?`) |
+| `_delete_producto` | Ídem `_update_producto` |
+| `_list_ventas` | `WHERE tienda_id = ctx.tienda_id` |
+| `_create_venta` | `INSERT` incluye `tienda_id = ctx.tienda_id` |
+| `_get_turno_activo` | `WHERE estado='abierto' AND tienda_id=?` — crítico para multi-tienda |
+| `_open_turno` | Verifica turno abierto solo dentro de `ctx.tienda_id`; `INSERT` incluye `tienda_id` |
+| `_list_turnos` | `WHERE tienda_id = ctx.tienda_id` |
+| `_close_turno` | `WHERE id=? AND tienda_id=? AND estado='abierto'` |
 
-| Método | Ruta | Descripción |
-|--------|------|-------------|
-| GET | `/api/tiendas` | Listar todas las tiendas |
-| POST | `/api/tiendas` | Crear tienda |
-| PUT | `/api/tiendas/:id` | Editar tienda |
-| GET | `/api/tiendas/:id/usuarios` | Usuarios de una tienda |
-| POST | `/api/tiendas/:id/usuarios` | Crear usuario en una tienda |
+**Superadmin exception:** Si `ctx.rol == 'superadmin'`, se omite el filtro `tienda_id` en todos los queries (ve datos de todas las tiendas incluyendo registros legacy `tienda_id=NULL`).
 
-### Protegidos — Gestión de usuarios (admin de tienda)
+### CORS
 
-| Método | Ruta | Descripción |
-|--------|------|-------------|
-| GET | `/api/usuarios` | Usuarios de mi tienda (admin) |
-| POST | `/api/usuarios` | Crear usuario en mi tienda (admin, solo rol cajero) |
-| PUT | `/api/usuarios/:id` | Editar nombre/rol/activo |
-| PUT | `/api/usuarios/:id/password` | Cambiar contraseña |
+`do_OPTIONS` debe incluir `Authorization` en los headers permitidos:
 
-### Protegidos — Endpoints existentes modificados
-
-Todos los endpoints de `productos`, `ventas`, `turnos` ahora:
-1. Llaman `require_auth()`
-2. Filtran queries con `WHERE tienda_id = ctx.tienda_id`
-3. En INSERT incluyen `tienda_id = ctx.tienda_id`
-
-**Excepción superadmin:** Si `ctx.rol == 'superadmin'`, no filtra por `tienda_id` (ve todo).
+```python
+self.send_header("Access-Control-Allow-Headers", "Content-Type, Authorization")
+```
 
 ---
 
 ## Frontend
 
-### Inicialización
+### localStorage
 
-Al cargar `index.html`:
-1. Leer `sfpos_token` y `sfpos_user` de localStorage.
-2. Si no existen o han expirado (comparar `exp` con `Date.now()`) → mostrar pantalla de login.
-3. Si existen → llamar `GET /api/auth/me` para validar con el servidor.
-   - 200 → continuar con la app, restaurar `currentUser`.
-   - 401 → limpiar localStorage → mostrar pantalla de login.
+```javascript
+// Al login exitoso:
+localStorage.setItem('sfpos_token', data.token);
+localStorage.setItem('sfpos_exp', data.exp);        // timestamp Unix en segundos
+localStorage.setItem('sfpos_user', JSON.stringify(data.user));
+localStorage.setItem('sfpos_tienda', JSON.stringify(data.tienda)); // null si superadmin
+```
 
-### Pantalla de login
+### Secuencia de arranque
 
-- Ocupa toda la pantalla, oculta la app principal (`#app-root { display: none }`).
-- Branding: logo/nombre **SFPOS** con tagline.
-- Campos: `username` (texto) + `password` (password) + botón "Ingresar".
-- En error: shake de formulario + mensaje inline (no toast).
-- Al autenticar: guardar `sfpos_token`, `sfpos_user` en localStorage → ocultar login → inicializar app.
+```
+1. Leer sfpos_token, sfpos_exp, sfpos_user de localStorage
+2. Si no existen → mostrar pantalla de login (NO llamar loadData)
+3. Si exp < Date.now()/1000 → limpiar localStorage → mostrar pantalla de login
+4. Si token presente y no expirado → GET /api/auth/me (con token)
+   a. 200 → restaurar currentUser → llamar loadData() → inicializar app
+   b. 401 → limpiar localStorage → mostrar pantalla de login
+```
+
+`loadData()` **nunca se llama** antes de que la autenticación esté confirmada.
+
+### `apiFetch` helper
+
+```javascript
+async function apiFetch(url, options = {}) {
+  const token = localStorage.getItem('sfpos_token');
+  const headers = { 'Content-Type': 'application/json', ...(options.headers || {}) };
+  if (token) headers['Authorization'] = `Bearer ${token}`;
+  const res = await fetch(url, { ...options, headers });
+  if (res.status === 401) {
+    localStorage.clear();
+    showLoginScreen('Sesión expirada. Ingresa de nuevo.');
+    return null;
+  }
+  return res;
+}
+```
+
+Todos los `fetch()` existentes se reemplazan por `apiFetch()`.
 
 ### Estado global nuevo
 
 ```javascript
 let currentUser = null;
-// {id, nombre, username, rol, tienda_id}
-// tienda_id === null para superadmin
+// { id, nombre, username, rol, tienda_id }  — tienda_id === null para superadmin
 ```
+
+### Pantalla de login
+
+- `#screen-login` ocupa pantalla completa. `#app-root` tiene `display:none` mientras no hay sesión.
+- Branding: nombre **SFPOS** con tagline.
+- Campos: `username` + `password` + botón "Ingresar".
+- Error: mensaje inline bajo el formulario (no toast). Sin shake para no afectar UX en tablet.
+- Éxito: guardar en localStorage → llamar secuencia de arranque desde paso 4a.
 
 ### Flujo por rol al entrar
 
 | Rol | Comportamiento |
 |-----|---------------|
-| `superadmin` | Muestra panel de plataforma (gestión de tiendas). Oculta toda la UI de cobro/inventario/reportes. |
-| `admin` | Entra en modo admin. Muestra tabs Inventario, Reportes, Usuarios. No muestra switcher Cajero/Admin. |
-| `cajero` | Entra directo a modo cajero (Cobro). No muestra tabs de admin. |
+| `superadmin` | Muestra `#screen-superadmin`. Oculta toda la UI de cobro/inventario/reportes/tabs. |
+| `admin` | Modo admin: tabs Inventario, Reportes, Usuarios. Puede acceder también a Cobro para operar la caja cuando no hay cajero disponible. Switcher Cajero/Admin oculto. |
+| `cajero` | Directo a Cobro. Sin tabs admin. Switcher oculto. |
 
 ### Cambios en UI existente
 
-- **Switcher Cajero/Admin** se oculta — el modo lo determina el rol.
-- **Barra superior** añade chip con nombre del usuario + botón "Cerrar sesión" (🚪).
-- **`abrirCaja()`** pre-rellena `cajero` con `currentUser.nombre` (el campo de texto se convierte en solo-lectura o se elimina del modal).
-- **Todos los `fetch()`** se envuelven en una función helper `apiFetch(url, options)` que añade `Authorization: Bearer <token>` automáticamente y maneja 401 redirigiendo al login.
+- **Switcher Cajero/Admin** se oculta (`display:none`) — el modo lo determina el rol.
+- **Barra superior**: chip con `currentUser.nombre` + botón "Cerrar sesión" (🚪).
+- **`abrirCaja()`**: el campo "Nombre del cajero" en el modal se pre-rellena con `currentUser.nombre` y se hace `readonly`. El nombre no es editable.
+- **Logout**: `confirm()` → si caja abierta → toast "Cierra la caja antes de cerrar sesión" y se bloquea el logout. Sin caja abierta → limpiar localStorage → mostrar pantalla de login.
 
-### Panel Superadmin
+### Aviso de sesión próxima a expirar
 
-Pantalla separada `#screen-superadmin` con dos subvistas:
+Cuando `sfpos_exp - Date.now()/1000 < 3600` (menos de 1 hora):
+- Mostrar un banner no bloqueante: "⏰ Tu sesión expira en menos de 1 hora. Guarda cambios."
+- Al expirar → `apiFetch` detecta 401 → limpiar localStorage → pantalla de login.
 
-**Vista lista de tiendas:**
-- Tabla: Nombre | Slug | Plan | Estado | Usuarios | Fecha | Acciones
-- Botón "Nueva tienda" → modal con: nombre, slug, plan
+### Panel Superadmin (`#screen-superadmin`)
 
-**Vista detalle de tienda:**
-- Datos editables de la tienda
+Dos subvistas renderizadas dinámicamente:
+
+**Lista de tiendas:**
+- Tabla: Nombre | Slug | Plan | Usuarios | Estado | Fecha | Acciones
+- Botón "Nueva tienda" → modal: nombre, slug, plan
+- Click en fila → subvista detalle de tienda
+
+**Detalle de tienda:**
+- Editar nombre, plan, activo (PUT /api/tiendas/:id)
 - Tabla de usuarios: Nombre | Usuario | Rol | Estado | Acciones
-- Botón "Nuevo usuario" → modal: nombre, username, contraseña temporal, rol (admin/cajero)
-- Botón desactivar usuario
+- Botón "Nuevo usuario" → modal: nombre, username, contraseña, rol
+- Botón "Desactivar" por usuario
 
 ### Panel Usuarios (admin de tienda)
 
-Nueva pestaña "Usuarios" en el modo admin:
+Nueva pestaña "Usuarios" en modo admin:
 - Lista de usuarios de la tienda con rol y estado
-- Admin puede crear cajeros y otros admins de su tienda
-- Admin NO puede crear superadmins
-- Admin puede cambiar contraseñas y desactivar usuarios
-
-### Logout
-
-- Botón "Cerrar sesión" → `confirm()` → limpiar `sfpos_token` + `sfpos_user` de localStorage → mostrar pantalla de login.
-- Si hay caja abierta → advertir antes de cerrar sesión.
-
-### Expiración de sesión
-
-Cualquier `fetch()` que retorne 401 → limpiar localStorage → mostrar pantalla de login con toast "Sesión expirada, ingresa de nuevo".
+- Admin puede crear usuarios con rol `admin` o `cajero` (no `superadmin`)
+- Admin puede cambiar contraseñas y desactivar usuarios (no su propio rol)
 
 ---
 
 ## Botón "Actualizar inventario"
 
-En la barra de herramientas del inventario, junto al botón de búsqueda, agregar:
+En la barra de herramientas del inventario, junto a la búsqueda:
 
 ```html
-<button onclick="recargarInventario()">🔄 Actualizar</button>
+<button onclick="recargarInventario()" title="Actualizar">🔄</button>
 ```
 
 ```javascript
 async function recargarInventario() {
-  await loadData();
+  const res = await apiFetch('/api/productos');
+  if (!res) return;
+  products = await res.json();
   renderInventario();
   showToast('✅ Inventario actualizado');
 }
@@ -245,19 +356,20 @@ async function recargarInventario() {
 
 ---
 
-## Seguridad
+## Seguridad — resumen y limitaciones conocidas
 
-- Contraseñas hasheadas con SHA-256 + sal aleatoria. Nunca se almacena la contraseña en texto plano.
-- Tokens HMAC-SHA256 con expiración. No se almacenan en servidor.
-- `SECRET_KEY` debe configurarse como env var en Railway. Sin ella, las sesiones no sobreviven reinicios del servidor.
-- El admin de tienda no puede escalar privilegios (no puede crear superadmins).
-- Todos los endpoints protegidos validan el token y filtran por `tienda_id`.
-
----
-
-## Migración de datos existentes
-
-Los registros existentes en `productos`, `ventas` y `turnos` quedan con `tienda_id = NULL`. Solo el superadmin los verá. El admin de la primera tienda no verá datos históricos a menos que se haga una migración manual asignando `tienda_id` a esos registros.
+| Aspecto | Decisión |
+|---------|----------|
+| Hashing de contraseñas | PBKDF2-HMAC-SHA256, 260.000 iteraciones, sal aleatoria 16 bytes |
+| Tokens | HMAC-SHA256 firmados, 12h de vida, stateless |
+| `SECRET_KEY` | Env var requerida; servidor no arranca sin ella |
+| Token payload visible | Por diseño (similar a JWT): contiene `user_id`, `tienda_id`, `rol`, `exp`. Aceptable. |
+| Escalación de rol | Bloqueada en servidor para `PUT /api/usuarios/:id` |
+| Usuario inactivo | Verificado en cada request (DB lookup) |
+| Tienda inactiva | Verificado en cada request (DB lookup) |
+| Brute-force en login | Sin rate limiting (limitación conocida para esta fase) |
+| Credenciales en localStorage | Solo el token (no la contraseña) |
+| Contraseña inicial | Generada aleatoriamente al seed, impresa en logs, nunca en código fuente |
 
 ---
 
@@ -265,6 +377,8 @@ Los registros existentes en `productos`, `ventas` y `turnos` quedan con `tienda_
 
 - Impersonación de tienda por superadmin
 - Recuperación de contraseña vía email
-- 2FA
-- Registro de tiendas por self-service (el superadmin crea las tiendas manualmente)
+- 2FA / MFA
+- Registro self-service de tiendas
 - Métricas globales de plataforma en el panel superadmin
+- Rate limiting en `/api/auth/login`
+- Refresh automático de tokens sin reingreso de contraseña
