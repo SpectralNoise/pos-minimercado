@@ -109,14 +109,25 @@ token = f"{payload_b64}.{signature}"
 
 La serialización de `tienda_id = None` como la cadena literal `"null"` es explícita e intencional. La deserialización convierte `"null"` → Python `None`.
 
-La respuesta incluye `exp` para que el cliente pueda hacer la verificación local de expiración:
+La respuesta incluye `exp` para que el cliente pueda hacer la verificación local de expiración.
 
+Respuesta para cajero/admin:
 ```json
 {
   "token": "...",
   "exp": 1234567890,
   "user": {"id": 1, "nombre": "María", "username": "maria", "rol": "cajero", "tienda_id": 2},
   "tienda": {"id": 2, "nombre": "Minimercado La 45", "slug": "la-45"}
+}
+```
+
+Respuesta para superadmin (`tienda_id` es `null`, `tienda` es `null`):
+```json
+{
+  "token": "...",
+  "exp": 1234567890,
+  "user": {"id": 1, "nombre": "Super Admin", "username": "admin", "rol": "superadmin", "tienda_id": null},
+  "tienda": null
 }
 ```
 
@@ -157,7 +168,7 @@ El lookup de `activo` en cada request es necesario para que la desactivación de
 
 ### Token expiry y tablets
 
-Los tokens expiran en 12 horas. Para tablets en turno continuo, el frontend detecta que faltan menos de 60 minutos para expirar (leyendo `exp` de localStorage) y hace un refresh silencioso llamando a `POST /api/auth/login` con las credenciales guardadas. **Las credenciales no se guardan en localStorage por seguridad** — cuando el token está próximo a expirar, se muestra un modal de reingreso de contraseña.
+Los tokens expiran en 12 horas. **Las credenciales no se guardan en localStorage por seguridad.** Cuando el token está próximo a expirar (menos de 60 minutos), se muestra un modal de reingreso de contraseña. El refresh automático silencioso (sin reingreso) está fuera de alcance de esta fase.
 
 **Limitación conocida:** Si el cajero no responde al modal de reingreso, la sesión expira y debe loguearse de nuevo. El turno de caja permanece abierto en el servidor hasta que se cierre explícitamente.
 
@@ -192,6 +203,10 @@ Respuesta 200: ver estructura en sección de tokens arriba.
 | PUT | `/api/usuarios/:id` | admin, superadmin | Editar nombre/activo. Ver restricciones abajo. |
 | PUT | `/api/usuarios/:id/password` | admin, superadmin | Cambiar contraseña |
 
+**Restricciones en `POST /api/usuarios` (admin de tienda):**
+- El servidor rechaza `rol = 'superadmin'` en el body si `ctx.rol != 'superadmin'` → 403.
+- El servidor sólo inserta usuarios con `tienda_id = ctx.tienda_id` (ignora cualquier `tienda_id` en el body).
+
 **Restricciones en `PUT /api/usuarios/:id`:**
 - El servidor rechaza cualquier intento de cambiar `rol` a `superadmin` si `ctx.rol != 'superadmin'` → 403.
 - El servidor rechaza modificar un usuario que pertenece a una tienda diferente a `ctx.tienda_id` (excepto superadmin) → 403.
@@ -215,7 +230,7 @@ Todos los handlers de `productos`, `ventas`, `turnos` ahora llaman `require_auth
 | `_delete_producto` | Ídem `_update_producto` |
 | `_list_ventas` | `WHERE tienda_id = ctx.tienda_id` |
 | `_create_venta` | `INSERT` incluye `tienda_id = ctx.tienda_id` |
-| `_get_turno_activo` | `WHERE estado='abierto' AND tienda_id=?` — crítico para multi-tienda |
+| `_get_turno_activo` | `WHERE estado='abierto' AND tienda_id=?` — crítico para multi-tienda. Si `ctx.tienda_id is None` (superadmin), retorna `null` (el superadmin no opera cajas directamente). |
 | `_open_turno` | Verifica turno abierto solo dentro de `ctx.tienda_id`; `INSERT` incluye `tienda_id` |
 | `_list_turnos` | `WHERE tienda_id = ctx.tienda_id` |
 | `_close_turno` | `WHERE id=? AND tienda_id=? AND estado='abierto'` |
@@ -266,7 +281,7 @@ async function apiFetch(url, options = {}) {
   if (token) headers['Authorization'] = `Bearer ${token}`;
   const res = await fetch(url, { ...options, headers });
   if (res.status === 401) {
-    localStorage.clear();
+    ['sfpos_token','sfpos_exp','sfpos_user','sfpos_tienda'].forEach(k => localStorage.removeItem(k));
     showLoginScreen('Sesión expirada. Ingresa de nuevo.');
     return null;
   }
