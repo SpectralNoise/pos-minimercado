@@ -1297,6 +1297,7 @@ table.inv-table {
   <div class="screen" id="screen-usuarios" style="flex-direction:column; overflow-y:auto; padding:24px;">
     <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:20px;">
       <span class="page-title">Usuarios</span>
+      <button class="btn-primary" onclick="openModal('modal-nuevo-usuario-admin')">+ Nuevo Usuario</button>
     </div>
     <div id="usuarios-list">Cargando...</div>
   </div>
@@ -1539,6 +1540,24 @@ table.inv-table {
       <input type="hidden" id="sa-user-tienda-id">
     </div>
     <div class="modal-footer"><button class="btn-primary" onclick="crearUsuarioSA()">Crear Usuario</button></div>
+  </div>
+</div>
+
+<div class="modal-overlay" id="modal-nuevo-usuario-admin">
+  <div class="modal">
+    <div class="modal-header"><span class="modal-title">Nuevo Usuario</span><button class="modal-close" onclick="closeModal('modal-nuevo-usuario-admin')">✕</button></div>
+    <div class="modal-body">
+      <div class="form-group"><label class="form-label">Nombre completo</label><input type="text" class="form-input" id="admin-user-nombre" placeholder="Ej: Juan Cajero"></div>
+      <div class="form-group"><label class="form-label">Usuario</label><input type="text" class="form-input" id="admin-user-username" placeholder="Ej: juan" autocapitalize="none"></div>
+      <div class="form-group"><label class="form-label">Contraseña</label><input type="password" class="form-input" id="admin-user-password"></div>
+      <div class="form-group"><label class="form-label">Rol</label>
+        <select class="form-input" id="admin-user-rol">
+          <option value="cajero">Cajero</option>
+          <option value="admin">Admin</option>
+        </select>
+      </div>
+    </div>
+    <div class="modal-footer"><button class="btn-primary" onclick="crearUsuarioAdmin()">Crear Usuario</button></div>
   </div>
 </div>
 
@@ -3327,7 +3346,79 @@ async function toggleUsuarioActivo(userId, nuevoActivo, tiendaId) {
   await verDetalleTienda(tiendaId);
 }
 
-function renderPanelUsuarios() {}
+async function renderPanelUsuarios() {
+  const list = document.getElementById('usuarios-list');
+  list.innerHTML = '<p style="color:var(--text-2)">Cargando usuarios...</p>';
+  try {
+    const res = await apiFetch('/api/usuarios');
+    if (!res) return;
+    const usuarios = await res.json();
+    list.innerHTML = `
+      <table style="width:100%; border-collapse:collapse; font-size:14px;">
+        <thead>
+          <tr style="border-bottom:2px solid var(--border); text-align:left;">
+            <th style="padding:8px 12px; color:var(--text-2);">Nombre</th>
+            <th style="padding:8px 12px; color:var(--text-2);">Usuario</th>
+            <th style="padding:8px 12px; color:var(--text-2);">Rol</th>
+            <th style="padding:8px 12px; color:var(--text-2);">Estado</th>
+            <th style="padding:8px 12px; color:var(--text-2);">Acciones</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${usuarios.length === 0
+            ? '<tr><td colspan="5" style="padding:20px; text-align:center; color:var(--text-2)">Sin usuarios registrados</td></tr>'
+            : usuarios.map(u => `
+          <tr style="border-bottom:1px solid var(--border);">
+            <td style="padding:10px 12px; font-weight:600;">${esc(u.nombre)}</td>
+            <td style="padding:10px 12px; color:var(--text-2);">${esc(u.username)}</td>
+            <td style="padding:10px 12px;">${esc(u.rol)}</td>
+            <td style="padding:10px 12px;">${u.activo ? '✅ Activo' : '⛔ Inactivo'}</td>
+            <td style="padding:10px 12px; display:flex; gap:6px; flex-wrap:wrap;">
+              <button class="btn-secondary" style="font-size:12px; padding:4px 8px;"
+                onclick="toggleUsuarioActivoAdmin(${u.id}, ${u.activo ? 0 : 1})">
+                ${u.activo ? 'Desactivar' : 'Activar'}
+              </button>
+            </td>
+          </tr>`).join('')
+          }
+        </tbody>
+      </table>`;
+  } catch(e) {
+    list.innerHTML = '<p style="color:var(--danger)">Error cargando usuarios</p>';
+  }
+}
+
+async function crearUsuarioAdmin() {
+  const nombre   = document.getElementById('admin-user-nombre').value.trim();
+  const username = document.getElementById('admin-user-username').value.trim();
+  const password = document.getElementById('admin-user-password').value;
+  const rol      = document.getElementById('admin-user-rol').value;
+  if (!nombre || !username || !password) { showToast('⚠ Completa todos los campos'); return; }
+  const res = await apiFetch('/api/usuarios', {
+    method: 'POST',
+    body: JSON.stringify({nombre, username, password, rol})
+  });
+  if (!res) return;
+  if (!res.ok) { const d = await res.json(); showToast('⚠ ' + d.error); return; }
+  // Reset form
+  document.getElementById('admin-user-nombre').value = '';
+  document.getElementById('admin-user-username').value = '';
+  document.getElementById('admin-user-password').value = '';
+  document.getElementById('admin-user-rol').selectedIndex = 0;
+  closeModal('modal-nuevo-usuario-admin');
+  showToast('✅ Usuario creado');
+  await renderPanelUsuarios();
+}
+
+async function toggleUsuarioActivoAdmin(userId, nuevoActivo) {
+  const res = await apiFetch(`/api/usuarios/${userId}`, {
+    method: 'PUT',
+    body: JSON.stringify({activo: nuevoActivo})
+  });
+  if (!res) return;
+  if (!res.ok) { showToast('⚠ Error al actualizar usuario'); return; }
+  await renderPanelUsuarios();
+}
 
 function iniciarCheckExpiracion() {
   if (_expiryCheckInterval) clearInterval(_expiryCheckInterval);
