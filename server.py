@@ -629,11 +629,18 @@ class Handler(BaseHTTPRequestHandler):
                      body.get("cat","General"), body.get("price",0),
                      body.get("stock",0), body.get("alert",5), prod_id) + tienda_params
                 )
-            row = conn.execute(
-                "SELECT id,emoji,name,barcode,cat,price,stock,alert,"
-                "(thumbnail IS NOT NULL AND thumbnail != '') AS has_thumbnail "
-                "FROM productos WHERE id=?", (prod_id,)
-            ).fetchone()
+            if tienda_params:  # non-superadmin: verificar que el producto pertenece a esta tienda
+                row = conn.execute(
+                    "SELECT id,emoji,name,barcode,cat,price,stock,alert,"
+                    "(thumbnail IS NOT NULL AND thumbnail != '') AS has_thumbnail "
+                    "FROM productos WHERE id=? AND tienda_id=?", (prod_id, ctx.tienda_id)
+                ).fetchone()
+            else:
+                row = conn.execute(
+                    "SELECT id,emoji,name,barcode,cat,price,stock,alert,"
+                    "(thumbnail IS NOT NULL AND thumbnail != '') AS has_thumbnail "
+                    "FROM productos WHERE id=?", (prod_id,)
+                ).fetchone()
             conn.commit(); conn.close()
             self.send_json(row_to_dict(row) if row else {}, 200 if row else 404)
         except Exception as e:
@@ -644,10 +651,14 @@ class Handler(BaseHTTPRequestHandler):
         if not ctx: return
         try:
             conn = get_db()
+            c = conn.cursor()
             if ctx.rol == 'superadmin':
-                conn.execute("DELETE FROM productos WHERE id=?", (prod_id,))
+                c.execute("DELETE FROM productos WHERE id=?", (prod_id,))
             else:
-                conn.execute("DELETE FROM productos WHERE id=? AND tienda_id=?", (prod_id, ctx.tienda_id))
+                c.execute("DELETE FROM productos WHERE id=? AND tienda_id=?", (prod_id, ctx.tienda_id))
+            if c.rowcount == 0:
+                conn.close()
+                self.send_error_json("Producto no encontrado", 404); return
             conn.commit(); conn.close()
             self.send_json({"ok": True})
         except Exception as e:
@@ -675,10 +686,16 @@ class Handler(BaseHTTPRequestHandler):
                     (venta_id, item.get("id"), item.get("name",""), item.get("emoji",""),
                      item.get("qty",1), item.get("price",0))
                 )
-                c.execute(
-                    "UPDATE productos SET stock = MAX(0, stock - ?) WHERE id=?",
-                    (item.get("qty",1), item.get("id"))
-                )
+                if tienda_id is None:
+                    c.execute(
+                        "UPDATE productos SET stock = MAX(0, stock - ?) WHERE id=?",
+                        (item.get("qty",1), item.get("id"))
+                    )
+                else:
+                    c.execute(
+                        "UPDATE productos SET stock = MAX(0, stock - ?) WHERE id=? AND tienda_id=?",
+                        (item.get("qty",1), item.get("id"), tienda_id)
+                    )
             row = conn.execute("SELECT * FROM ventas WHERE id=?", (venta_id,)).fetchone()
             conn.commit(); conn.close()
             self.send_json({"ok": True, "venta": row_to_dict(row)}, 201)
@@ -863,6 +880,8 @@ Al final, un consejo breve sobre los productos sin rotación."""
     def _open_turno(self):
         ctx = self.require_auth()
         if not ctx: return
+        if ctx.tienda_id is None:
+            self.send_error_json("Superadmin no puede operar cajas directamente", 403); return
         try:
             body = self.read_json_body()
             cajero = body.get("cajero", "").strip()
