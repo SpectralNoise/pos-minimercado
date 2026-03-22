@@ -1095,6 +1095,10 @@ table.inv-table {
         <button class="mode-btn cajero active" id="mode-cajero" onclick="setMode('cajero')">🛒 Cajero</button>
         <button class="mode-btn" id="mode-admin" onclick="setMode('admin')">⚙ Admin</button>
       </div>
+      <div id="user-chip" style="display:none; align-items:center; gap:8px; font-size:13px; color:var(--text-2);">
+        <span id="user-chip-name" style="font-weight:600; color:var(--text);"></span>
+        <button onclick="doLogout()" title="Cerrar sesión" style="background:none;border:none;cursor:pointer;font-size:16px;padding:4px;">🚪</button>
+      </div>
       <button id="btn-install-pwa" onclick="installPWA()" title="Instalar app" style="display:none;align-items:center;gap:4px;padding:4px 10px;border-radius:20px;border:1px solid var(--accent);background:var(--accent-bg);color:var(--accent);font-size:12px;font-weight:600;cursor:pointer;">⬇ Instalar</button>
       <button class="theme-toggle" id="theme-toggle" onclick="toggleTheme()" title="Cambiar tema"></button>
       <div class="status-dot" title="Sistema activo"></div>
@@ -1110,6 +1114,10 @@ table.inv-table {
     <div class="caja-info" id="caja-info"></div>
     <button class="btn-apertura" id="btn-apertura" onclick="openModal('modal-apertura')">Abrir Caja</button>
     <button class="btn-cierre" id="btn-cierre" onclick="openCierreModal()" style="display:none">Cerrar Caja</button>
+  </div>
+
+  <div id="session-expiry-banner" style="display:none; background:var(--warning-bg,#fef3c7); color:var(--warning,#92400e); padding:8px 20px; font-size:13px; text-align:center;">
+    ⏰ Tu sesión expira en menos de 1 hora. Guarda cambios.
   </div>
 
   <!-- SCREEN: COBRO -->
@@ -1275,6 +1283,14 @@ table.inv-table {
           <div id="top-products"></div>
         </div>
       </div>
+    </div>
+  </div>
+
+  <div class="screen" id="screen-superadmin" style="display:none; flex-direction:column; overflow-y:auto;">
+    <div style="padding:32px 24px;">
+      <h2 style="font-family:var(--ff-disp); font-size:20px; font-weight:700; margin-bottom:8px;">Panel Superadmin</h2>
+      <p style="color:var(--text-2); font-size:14px; margin-bottom:24px;">Gestión de tiendas y usuarios de la plataforma SFPOS.</p>
+      <div id="superadmin-content">Cargando...</div>
     </div>
   </div>
 
@@ -1693,6 +1709,7 @@ function switchScreen(name) {
   if (name === 'inventario') renderInventario();
   if (name === 'reportes') renderReportes();
   if (name === 'cobro') document.getElementById('search-input').focus();
+  if (name === 'usuarios') renderPanelUsuarios();
 }
 
 // ─── RELOJ ────────────────────────────────────
@@ -3053,23 +3070,113 @@ const savedTheme = localStorage.getItem('pos-theme');
 if (savedTheme === 'dark') document.documentElement.dataset.theme = 'dark';
 updateThemeIcon();
 
-// Actualizar fecha en modal apertura
-document.getElementById('apertura-fecha').textContent =
-  new Date().toLocaleDateString('es-CO', {weekday:'long', year:'numeric', month:'long', day:'numeric'});
+// ── BOOT ───────────────────────────────────────────────────────────
+async function iniciarApp(user, tienda) {
+  currentUser = user;
+  // Ocultar switcher modo — lo determina el rol
+  document.querySelector('.mode-switcher').style.display = 'none';
+  // Mostrar chip de usuario
+  const chip = document.getElementById('user-chip');
+  document.getElementById('user-chip-name').textContent = user.nombre;
+  chip.style.display = 'flex';
+  // Mostrar app, ocultar login
+  document.getElementById('login-screen').style.display = 'none';
+  document.getElementById('app').style.display = 'flex';
 
-// Aplicar modo guardado
-setMode(currentMode);
-updateCajaBar();
+  if (user.rol === 'superadmin') {
+    // Ocultar nav tabs normales, mostrar pantalla superadmin
+    document.getElementById('tab-cobro').style.display = 'none';
+    document.getElementById('tab-inventario').style.display = 'none';
+    document.getElementById('tab-reportes').style.display = 'none';
+    document.getElementById('caja-bar').style.display = 'none';
+    // Mostrar screen superadmin directamente
+    document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
+    document.getElementById('screen-superadmin').style.display = 'flex';
+    document.getElementById('screen-superadmin').classList.add('active');
+    await renderSuperadmin();
+  } else {
+    // Modo determinado por rol
+    const modo = user.rol === 'admin' ? 'admin' : 'cajero';
+    const campoNombre = document.getElementById('apertura-cajero');
+    if (campoNombre) {
+      campoNombre.value = user.nombre;
+      campoNombre.readOnly = true;
+    }
+    setMode(modo);
+    updateCajaBar();
+    await loadData();
+    renderCatPills();
+    renderProducts();
+    renderCart();
+    renderInventario();
+    renderReportes();
+    updateLowStockBadge();
+    // Si admin, agregar pestaña Usuarios
+    if (user.rol === 'admin') {
+      let tabUsuarios = document.getElementById('tab-usuarios');
+      if (!tabUsuarios) {
+        tabUsuarios = document.createElement('div');
+        tabUsuarios.id = 'tab-usuarios';
+        tabUsuarios.className = 'nav-tab';
+        tabUsuarios.dataset.screen = 'usuarios';
+        tabUsuarios.innerHTML = '<span class="tab-icon">👥</span> Usuarios';
+        tabUsuarios.onclick = () => switchScreen('usuarios');
+        document.getElementById('tab-reportes').after(tabUsuarios);
+      }
+      tabUsuarios.style.display = '';
+    }
+  }
+  iniciarCheckExpiracion();
+}
 
-// Cargar datos desde SQLite y renderizar
+let _expiryCheckInterval = null;
+
+function iniciarCheckExpiracion() {
+  if (_expiryCheckInterval) clearInterval(_expiryCheckInterval);
+  _expiryCheckInterval = setInterval(() => {
+    const exp = parseInt(localStorage.getItem('sfpos_exp') || '0');
+    const ahora = Math.floor(Date.now() / 1000);
+    const banner = document.getElementById('session-expiry-banner');
+    if (exp > 0 && exp - ahora < 3600 && exp > ahora) {
+      if (banner) banner.style.display = 'block';
+    }
+  }, 60000);
+}
+
+// Secuencia de arranque
 (async () => {
-  await loadData();
-  renderCatPills();
-  renderProducts();
-  renderCart();
-  renderInventario();
-  renderReportes();
-  updateLowStockBadge();
+  // Fecha en modal apertura
+  document.getElementById('apertura-fecha').textContent =
+    new Date().toLocaleDateString('es-CO', {weekday:'long', year:'numeric', month:'long', day:'numeric'});
+
+  const token = localStorage.getItem('sfpos_token');
+  const exp   = parseInt(localStorage.getItem('sfpos_exp') || '0');
+  const ahora = Math.floor(Date.now() / 1000);
+
+  if (!token || exp < ahora) {
+    ['sfpos_token','sfpos_exp','sfpos_user','sfpos_tienda'].forEach(k => localStorage.removeItem(k));
+    showLoginScreen();
+    return;
+  }
+
+  // Validar token con el servidor.
+  // NOTA: usamos fetch() directamente (no apiFetch) porque apiFetch llama showLoginScreen()
+  // en 401, lo que crearía un ciclo si la sesión ya expiró. Este es el único lugar donde
+  // se maneja el 401 manualmente en el boot.
+  try {
+    const res = await fetch('/api/auth/me', {
+      headers: { 'Authorization': `Bearer ${token}` }
+    });
+    if (!res.ok) {
+      ['sfpos_token','sfpos_exp','sfpos_user','sfpos_tienda'].forEach(k => localStorage.removeItem(k));
+      showLoginScreen('Sesión expirada. Ingresa de nuevo.');
+      return;
+    }
+    const data = await res.json();
+    await iniciarApp(data.user, data.tienda);
+  } catch(e) {
+    showLoginScreen('Error de conexión. Intenta de nuevo.');
+  }
 })();
 
 // ─── PWA: Service Worker ───────────────────────────────────────────
