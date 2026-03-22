@@ -3251,16 +3251,19 @@ async function verDetalleTienda(tiendaId) {
           <th style="padding:8px 12px; color:var(--text-2);">Acciones</th>
         </tr></thead>
         <tbody>
-          ${usuarios.map(u => `
+          ${usuarios.length === 0
+            ? '<tr><td colspan="5" style="padding:20px; text-align:center; color:var(--text-2)">Sin usuarios registrados</td></tr>'
+            : usuarios.map(u => `
           <tr style="border-bottom:1px solid var(--border);">
             <td style="padding:10px 12px;">${esc(u.nombre)}</td>
             <td style="padding:10px 12px; color:var(--text-2);">${esc(u.username)}</td>
-            <td style="padding:10px 12px;">${u.rol}</td>
+            <td style="padding:10px 12px;">${esc(u.rol)}</td>
             <td style="padding:10px 12px;">${u.activo ? '✅ Activo' : '⛔ Inactivo'}</td>
             <td style="padding:10px 12px;">
               <button class="btn-secondary" style="font-size:12px; padding:4px 8px;" onclick="toggleUsuarioActivo(${u.id},${u.activo ? 0 : 1},${tiendaId})">${u.activo ? 'Desactivar' : 'Activar'}</button>
             </td>
-          </tr>`).join('')}
+          </tr>`).join('')
+          }
         </tbody>
       </table>`;
   } catch(e) {
@@ -3288,6 +3291,9 @@ async function crearTienda() {
   });
   if (!res) return;
   if (!res.ok) { const d = await res.json(); showToast('⚠ ' + d.error); return; }
+  document.getElementById('tienda-nombre').value = '';
+  document.getElementById('tienda-slug').value = '';
+  document.getElementById('tienda-plan').selectedIndex = 0;
   closeModal('modal-nueva-tienda');
   showToast('✅ Tienda creada');
   await renderSuperadmin();
