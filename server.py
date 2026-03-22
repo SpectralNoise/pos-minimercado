@@ -337,24 +337,34 @@ class Handler(BaseHTTPRequestHandler):
             body = self.read_json_body()
             username = body.get("username", "").strip().lower()
             password = body.get("password", "")
+            tienda_slug = body.get("tienda_slug", "").strip()
             if not username or not password:
                 self.send_error_json("Faltan credenciales", 400); return
             conn = get_db()
             try:
-                # Superadmin: tienda_id IS NULL
-                user = conn.execute(
-                    "SELECT * FROM usuarios WHERE username=? AND tienda_id IS NULL", (username,)
-                ).fetchone()
-                if not user:
-                    # Usuario de tienda — la constraint es UNIQUE(tienda_id, username),
-                    # por lo que dos tiendas pueden tener el mismo username. En esta fase,
-                    # el login no tiene selector de tienda, así que se toma el primer match.
-                    # En producción, los admins deben asegurar usernames globalmente únicos
-                    # para evitar ambigüedad. Se selecciona el primer resultado por created_at.
+                # Superadmin: tienda_id IS NULL (solo desde la raíz, sin slug)
+                user = None
+                if not tienda_slug:
                     user = conn.execute(
-                        "SELECT * FROM usuarios WHERE username=? AND tienda_id IS NOT NULL ORDER BY created_at ASC LIMIT 1",
-                        (username,)
+                        "SELECT * FROM usuarios WHERE username=? AND tienda_id IS NULL", (username,)
                     ).fetchone()
+                if not user:
+                    if tienda_slug:
+                        # Login con slug → buscar exactamente en esa tienda
+                        tienda_row = conn.execute(
+                            "SELECT id FROM tiendas WHERE slug=? AND activo=1", (tienda_slug,)
+                        ).fetchone()
+                        if not tienda_row:
+                            self.send_error_json("Tienda no encontrada", 404); return
+                        user = conn.execute(
+                            "SELECT * FROM usuarios WHERE username=? AND tienda_id=?",
+                            (username, tienda_row["id"])
+                        ).fetchone()
+                    else:
+                        user = conn.execute(
+                            "SELECT * FROM usuarios WHERE username=? AND tienda_id IS NOT NULL ORDER BY created_at ASC LIMIT 1",
+                            (username,)
+                        ).fetchone()
                 if not user:
                     self.send_error_json("Credenciales incorrectas", 401); return
                 if not user["activo"]:
@@ -436,7 +446,7 @@ class Handler(BaseHTTPRequestHandler):
     # ── GET ────────────────────────────────────────────────────────
     def do_GET(self):
         path = self.path.split("?")[0]
-        if path in ("/", "/index.html"):
+        if path in ("/", "/index.html") or path.startswith("/t/"):
             self._serve_file(BASE_DIR / "index.html", "text/html")
         elif path == "/api/status":
             self.send_json({"db": "turso" if USE_TURSO else "sqlite", "turso_url": bool(TURSO_URL), "libsql_ok": _LIBSQL_OK})
@@ -444,6 +454,9 @@ class Handler(BaseHTTPRequestHandler):
             self._auth_me()
         elif path == "/api/tiendas":
             self._list_tiendas()
+        elif path.startswith("/api/tiendas/by-slug/"):
+            slug = path.split("/api/tiendas/by-slug/")[1]
+            self._get_tienda_by_slug(slug)
         elif path == "/api/usuarios":
             self._list_usuarios()
         elif path.startswith("/api/tiendas/") and path.endswith("/usuarios"):
@@ -1132,6 +1145,21 @@ Al final, un consejo breve sobre los productos sin rotación."""
             return None
 
     # ── TIENDAS (superadmin) ────────────────────────────────────────
+    def _get_tienda_by_slug(self, slug):
+        """Endpoint público — devuelve id+nombre+slug de la tienda (sin datos sensibles)."""
+        if not slug:
+            self.send_error_json("Slug requerido", 400); return
+        conn = get_db()
+        try:
+            row = conn.execute(
+                "SELECT id, nombre, slug FROM tiendas WHERE slug=? AND activo=1", (slug,)
+            ).fetchone()
+        finally:
+            conn.close()
+        if not row:
+            self.send_error_json("Tienda no encontrada", 404); return
+        self.send_json({"id": row["id"], "nombre": row["nombre"], "slug": row["slug"]})
+
     def _list_tiendas(self):
         ctx = self.require_auth()
         if not ctx: return

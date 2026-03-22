@@ -1049,7 +1049,8 @@ table.inv-table {
   <div style="width:100%; max-width:380px;">
     <div style="text-align:center; margin-bottom:32px;">
       <div style="font-size:48px; margin-bottom:8px;">🛒</div>
-      <div style="font-family:var(--ff-disp); font-size:32px; font-weight:800; letter-spacing:-.02em; color:var(--text)">SFPOS</div>
+      <div id="login-tienda-nombre" style="display:none; font-family:var(--ff-disp); font-size:22px; font-weight:800; color:var(--text); margin-bottom:2px;"></div>
+      <div style="font-family:var(--ff-disp); font-size:14px; font-weight:600; letter-spacing:.06em; color:var(--text-2); text-transform:uppercase;">SFPOS</div>
       <div style="font-size:13px; color:var(--text-2); margin-top:4px;">Sistema de Punto de Venta</div>
     </div>
     <div style="background:var(--surface); border:1px solid var(--border); border-radius:16px; padding:28px 24px;">
@@ -1196,8 +1197,7 @@ table.inv-table {
         <div><div class="sc-label">Valor inventario</div><div class="sc-val" id="stat-val" style="font-size:15px">$0</div></div>
       </div>
     </div>
-    <!-- Alertas sin rotación -->
-    <div id="sinrot-alert" style="display:none;margin:0 0 12px;padding:10px 14px;background:rgba(245,158,11,.08);border:1px solid rgba(245,158,11,.25);border-radius:var(--r-md);font-size:13px;color:var(--warn)"></div>
+    <div id="sinrot-alert" style="display:none"></div>
 
     <div class="inv-table-wrap">
       <table class="inv-table">
@@ -1621,11 +1621,14 @@ async function doLogin() {
     errEl.textContent = 'Ingresa usuario y contraseña'; errEl.style.display = 'block'; return;
   }
   btn.disabled = true; btn.textContent = 'Ingresando...';
+  // Leer slug de la URL (ej: /t/granero-ambar)
+  const slugMatch = window.location.pathname.match(/^\/t\/([^/]+)/);
+  const tienda_slug = slugMatch ? slugMatch[1] : '';
   try {
     const res = await fetch('/api/auth/login', {
       method: 'POST',
       headers: {'Content-Type':'application/json'},
-      body: JSON.stringify({username, password})
+      body: JSON.stringify({username, password, ...(tienda_slug && {tienda_slug})})
     });
     const data = await res.json();
     if (!res.ok) {
@@ -3437,6 +3440,20 @@ function iniciarCheckExpiracion() {
   // Fecha en modal apertura
   document.getElementById('apertura-fecha').textContent =
     new Date().toLocaleDateString('es-CO', {weekday:'long', year:'numeric', month:'long', day:'numeric'});
+
+  // Si la URL es /t/:slug, precargar nombre de la tienda en el login
+  const slugMatch = window.location.pathname.match(/^\/t\/([^/]+)/);
+  if (slugMatch) {
+    try {
+      const r = await fetch(`/api/tiendas/by-slug/${slugMatch[1]}`);
+      if (r.ok) {
+        const t = await r.json();
+        const el = document.getElementById('login-tienda-nombre');
+        el.textContent = t.nombre;
+        el.style.display = 'block';
+      }
+    } catch(e) { /* continuar igual */ }
+  }
 
   const token = localStorage.getItem('sfpos_token');
   const exp   = parseInt(localStorage.getItem('sfpos_exp') || '0');
