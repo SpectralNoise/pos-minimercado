@@ -26,7 +26,11 @@ except ImportError:
     AI_AVAILABLE = False
     print("⚠  anthropic no instalado. Corre: pip3 install anthropic")
 
-from PIL import Image
+try:
+    from PIL import Image
+    PIL_AVAILABLE = True
+except ImportError:
+    PIL_AVAILABLE = False
 
 ANTHROPIC_API_KEY = os.environ.get("ANTHROPIC_API_KEY", "")
 TURSO_URL         = os.environ.get("TURSO_URL", "")
@@ -470,14 +474,24 @@ class Handler(BaseHTTPRequestHandler):
             finally:
                 conn.close()
         elif path.startswith("/api/productos/") and path.endswith("/thumbnail"):
+            ctx = self.require_auth()
+            if not ctx: return
             parts = path.split("/")
             if len(parts) == 5:
                 prod_id = parts[3]
+                if not prod_id.isdigit():
+                    self.send_response(404); self.end_headers(); return
                 conn = get_db()
                 try:
-                    row = conn.execute(
-                        "SELECT thumbnail FROM productos WHERE id=?", (prod_id,)
-                    ).fetchone()
+                    if ctx.rol == 'superadmin':
+                        row = conn.execute(
+                            "SELECT thumbnail FROM productos WHERE id=?", (prod_id,)
+                        ).fetchone()
+                    else:
+                        row = conn.execute(
+                            "SELECT thumbnail FROM productos WHERE id=? AND tienda_id=?",
+                            (prod_id, ctx.tienda_id)
+                        ).fetchone()
                 finally:
                     conn.close()
                 if row and row["thumbnail"]:
@@ -501,6 +515,8 @@ class Handler(BaseHTTPRequestHandler):
             else:
                 self.send_response(404); self.end_headers()
         elif path.startswith("/api/lookup-barcode/"):
+            ctx = self.require_auth()
+            if not ctx: return
             barcode = path.split("/api/lookup-barcode/")[1]
             self._lookup_barcode(barcode)
         elif path == "/api/turnos/activo":
@@ -564,10 +580,16 @@ class Handler(BaseHTTPRequestHandler):
         elif self.path == "/api/ventas":
             self._create_venta()
         elif self.path == "/analyze-product":
+            ctx = self.require_auth()
+            if not ctx: return
             self._handle_analyze_product()
         elif self.path == "/api/ai-cierre":
+            ctx = self.require_auth()
+            if not ctx: return
             self._handle_ai_cierre()
         elif self.path == "/api/ai-pedido":
+            ctx = self.require_auth()
+            if not ctx: return
             self._handle_ai_pedido()
         elif self.path == "/api/turnos":
             self._open_turno()
@@ -612,6 +634,8 @@ class Handler(BaseHTTPRequestHandler):
     def _create_producto(self):
         ctx = self.require_auth()
         if not ctx: return
+        if ctx.rol not in ('admin', 'superadmin'):
+            self.send_error_json("Acceso denegado", 403); return
         try:
             body = self.read_json_body()
             tienda_id = None if ctx.rol == 'superadmin' else ctx.tienda_id
@@ -636,6 +660,8 @@ class Handler(BaseHTTPRequestHandler):
     def _update_producto(self, prod_id):
         ctx = self.require_auth()
         if not ctx: return
+        if ctx.rol not in ('admin', 'superadmin'):
+            self.send_error_json("Acceso denegado", 403); return
         try:
             body = self.read_json_body()
             conn = get_db()
@@ -675,6 +701,8 @@ class Handler(BaseHTTPRequestHandler):
     def _delete_producto(self, prod_id):
         ctx = self.require_auth()
         if not ctx: return
+        if ctx.rol not in ('admin', 'superadmin'):
+            self.send_error_json("Acceso denegado", 403); return
         try:
             conn = get_db()
             c = conn.cursor()
@@ -1210,6 +1238,8 @@ Al final, un consejo breve sobre los productos sin rotación."""
             rol = body.get("rol","cajero")
             if not nombre or not username or not password:
                 self.send_error_json("Faltan campos requeridos"); return
+            if len(password) < 6:
+                self.send_error_json("La contraseña debe tener al menos 6 caracteres", 400); return
             if rol not in ('admin','cajero'):
                 self.send_error_json("Rol inválido", 400); return
             salt = secrets.token_hex(16)
@@ -1275,6 +1305,8 @@ Al final, un consejo breve sobre los productos sin rotación."""
             rol = body.get("rol","cajero")
             if not nombre or not username or not password:
                 self.send_error_json("Faltan campos requeridos"); return
+            if len(password) < 6:
+                self.send_error_json("La contraseña debe tener al menos 6 caracteres", 400); return
             # Admin no puede crear superadmins
             if rol == 'superadmin' and ctx.rol != 'superadmin':
                 self.send_error_json("No puedes crear usuarios superadmin", 403); return
@@ -1355,6 +1387,8 @@ Al final, un consejo breve sobre los productos sin rotación."""
             new_password = body.get("password","")
             if not new_password:
                 self.send_error_json("Falta la nueva contraseña"); return
+            if len(new_password) < 6:
+                self.send_error_json("La contraseña debe tener al menos 6 caracteres", 400); return
             conn = get_db()
             try:
                 target = conn.execute("SELECT * FROM usuarios WHERE id=?", (user_id,)).fetchone()
