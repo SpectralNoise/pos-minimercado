@@ -442,7 +442,7 @@ class Handler(BaseHTTPRequestHandler):
             self._list_tiendas()
         elif path.startswith("/api/tiendas/") and path.endswith("/usuarios"):
             parts = path.split("/")
-            if len(parts) == 5:
+            if len(parts) == 5 and parts[3].isdigit():
                 self._list_tienda_usuarios(int(parts[3]))
             else:
                 self.send_error_json("Ruta no encontrada", 404)
@@ -573,7 +573,7 @@ class Handler(BaseHTTPRequestHandler):
             self._create_tienda()
         elif self.path.startswith("/api/tiendas/") and self.path.endswith("/usuarios"):
             parts = self.path.split("/")
-            if len(parts) == 5:
+            if len(parts) == 5 and parts[3].isdigit():
                 self._create_tienda_usuario(int(parts[3]))
             else:
                 self.send_error_json("Ruta no encontrada", 404)
@@ -587,7 +587,7 @@ class Handler(BaseHTTPRequestHandler):
             self._update_producto(parts[3])
         elif len(parts) == 5 and parts[2] == "turnos" and parts[4] == "cierre":
             self._close_turno(int(parts[3]))
-        elif len(parts) == 4 and parts[2] == "tiendas":
+        elif len(parts) == 4 and parts[2] == "tiendas" and parts[3].isdigit():
             self._update_tienda(int(parts[3]))
         else:
             self.send_error_json("Ruta no encontrada", 404)
@@ -1151,15 +1151,19 @@ Al final, un consejo breve sobre los productos sin rotación."""
             self.send_error_json("Acceso denegado", 403); return
         try:
             body = self.read_json_body()
+            nombre = body.get("nombre", "").strip()
+            if not nombre:
+                self.send_error_json("Falta nombre", 400); return
             conn = get_db()
             try:
-                conn.execute(
-                    "UPDATE tiendas SET nombre=?, plan=?, activo=? WHERE id=?",
-                    (body.get("nombre"), body.get("plan","basico"), int(body.get("activo",1)), tienda_id)
-                )
                 tienda = conn.execute("SELECT * FROM tiendas WHERE id=?", (tienda_id,)).fetchone()
                 if not tienda:
                     self.send_error_json("Tienda no encontrada", 404); return
+                conn.execute(
+                    "UPDATE tiendas SET nombre=?, plan=?, activo=? WHERE id=?",
+                    (nombre, body.get("plan", tienda["plan"]), int(body.get("activo", tienda["activo"])), tienda_id)
+                )
+                tienda = conn.execute("SELECT * FROM tiendas WHERE id=?", (tienda_id,)).fetchone()
                 conn.commit()
                 self.send_json(row_to_dict(tienda))
             finally:
@@ -1198,12 +1202,15 @@ Al final, un consejo breve sobre los productos sin rotación."""
             rol = body.get("rol","cajero")
             if not nombre or not username or not password:
                 self.send_error_json("Faltan campos requeridos"); return
-            if rol not in ('admin','cajero','superadmin'):
+            if rol not in ('admin','cajero'):
                 self.send_error_json("Rol inválido", 400); return
             salt = secrets.token_hex(16)
             password_hash = _hash_password(password, salt)
             conn = get_db()
             try:
+                tienda_check = conn.execute("SELECT id FROM tiendas WHERE id=?", (tienda_id,)).fetchone()
+                if not tienda_check:
+                    self.send_error_json("Tienda no encontrada", 404); return
                 c = conn.cursor()
                 c.execute(
                     "INSERT INTO usuarios (tienda_id,nombre,username,password_hash,salt,rol) VALUES (?,?,?,?,?,?)",
