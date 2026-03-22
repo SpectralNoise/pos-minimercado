@@ -2354,10 +2354,11 @@ async function generarPedido() {
   document.getElementById('modal-pedido').classList.add('open');
 
   try {
-    const res = await fetch('/api/ai-pedido', {
+    const res = await apiFetch('/api/ai-pedido', {
       method: 'POST', headers: {'Content-Type':'application/json'},
       body: JSON.stringify({ criticos: [...agotados, ...criticos], bajos, sin_rotacion: sinRot })
     });
+    if (!res) return;
     const data = await res.json();
     document.getElementById('pedido-ia-texto').textContent = data.pedido || '—';
   } catch(e) {
@@ -2469,11 +2470,12 @@ async function analyzePhoto() {
   status.textContent = 'Consultando Claude Vision...';
 
   try {
-    const res = await fetch('/analyze-product', {
+    const res = await apiFetch('/analyze-product', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ image: currentImageB64, mediaType: currentMediaType })
     });
+    if (!res) return;
     const data = await res.json();
     if (!res.ok || data.error) throw new Error(data.error || 'Error del servidor');
 
@@ -2834,7 +2836,7 @@ function updateCajaBar() {
   }
 }
 
-function openCierreModal() {
+async function openCierreModal() {
   if (!cajaSession) return;
   const now = new Date();
   const sesVentas = sales.filter(s => cajaSession.ventasIds.includes(s.id));
@@ -2871,16 +2873,19 @@ function openCierreModal() {
   iaSection.style.display = 'block';
   iaTexto.textContent = '⏳ Generando resumen...';
 
-  fetch('/api/ai-cierre', {
-    method: 'POST',
-    headers: {'Content-Type':'application/json'},
-    body: JSON.stringify({ cajero: cajaSession.cajero, duracion_min: durMin,
-      total, efectivo, transf, tx_count: sesVentas.length, top_productos: topProds })
-  }).then(r => r.json()).then(d => {
+  try {
+    const res = await apiFetch('/api/ai-cierre', {
+      method: 'POST',
+      headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({ cajero: cajaSession.cajero, duracion_min: durMin,
+        total, efectivo, transf, tx_count: sesVentas.length, top_productos: topProds })
+    });
+    if (!res) { iaSection.style.display = 'none'; return; }
+    const d = await res.json();
     iaTexto.textContent = d.resumen || '—';
-  }).catch(() => {
+  } catch (_) {
     iaSection.style.display = 'none';
-  });
+  }
 }
 
 function calcDiferencia() {
