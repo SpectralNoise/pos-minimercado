@@ -390,6 +390,8 @@ class Handler(BaseHTTPRequestHandler):
             conn = get_db()
             try:
                 user = conn.execute("SELECT * FROM usuarios WHERE id=?", (ctx.user_id,)).fetchone()
+                if not user:
+                    self.send_error_json("Usuario no encontrado", 404); return
                 tienda = None
                 if ctx.tienda_id is not None:
                     t = conn.execute("SELECT * FROM tiendas WHERE id=?", (ctx.tienda_id,)).fetchone()
