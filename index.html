@@ -3232,6 +3232,7 @@ async function verDetalleTienda(tiendaId) {
     if (!tRes || !uRes) return;
     const tiendas = await tRes.json();
     const tienda = tiendas.find(t => t.id === tiendaId);
+    if (!tienda) { content.innerHTML = '<p style="color:var(--danger)">Tienda no encontrada</p>'; return; }
     const usuarios = await uRes.json();
     content.innerHTML = `
       <button class="btn-secondary" onclick="renderSuperadmin()" style="margin-bottom:16px;">← Volver</button>
@@ -3272,6 +3273,7 @@ function _abrirModalNuevoUsuarioSA(tiendaId) {
   document.getElementById('sa-user-nombre').value = '';
   document.getElementById('sa-user-username').value = '';
   document.getElementById('sa-user-password').value = '';
+  document.getElementById('sa-user-rol').selectedIndex = 0;
   openModal('modal-nuevo-usuario-sa');
 }
 
