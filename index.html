@@ -1427,7 +1427,7 @@ table.inv-table {
 
       <div class="form-group" style="margin-bottom:14px">
         <label style="font-size:12px;text-transform:uppercase;letter-spacing:.07em;color:var(--text-2);font-family:var(--ff-disp);font-weight:600">Nombre del cajero</label>
-        <input type="text" class="form-input" id="apertura-cajero" placeholder="Ej: María García" autocomplete="off">
+        <input type="text" class="form-input" id="apertura-cajero" placeholder="Ej: María García" autocomplete="off" readonly style="background:var(--bg-2,var(--surface)); color:var(--text-2); cursor:default;">
       </div>
 
       <div class="pay-label">Efectivo inicial en caja</div>
@@ -3348,6 +3348,7 @@ async function toggleUsuarioActivo(userId, nuevoActivo, tiendaId) {
 
 async function renderPanelUsuarios() {
   const list = document.getElementById('usuarios-list');
+  if (!list) return;
   list.innerHTML = '<p style="color:var(--text-2)">Cargando usuarios...</p>';
   try {
     const res = await apiFetch('/api/usuarios');
@@ -3374,10 +3375,7 @@ async function renderPanelUsuarios() {
             <td style="padding:10px 12px;">${esc(u.rol)}</td>
             <td style="padding:10px 12px;">${u.activo ? '✅ Activo' : '⛔ Inactivo'}</td>
             <td style="padding:10px 12px; display:flex; gap:6px; flex-wrap:wrap;">
-              <button class="btn-secondary" style="font-size:12px; padding:4px 8px;"
-                onclick="toggleUsuarioActivoAdmin(${u.id}, ${u.activo ? 0 : 1})">
-                ${u.activo ? 'Desactivar' : 'Activar'}
-              </button>
+              ${u.id !== currentUser?.id ? `<button class="btn-secondary" style="font-size:12px; padding:4px 8px;" onclick="toggleUsuarioActivoAdmin(${u.id}, ${u.activo ? 0 : 1})">${u.activo ? 'Desactivar' : 'Activar'}</button>` : '(yo)'}
             </td>
           </tr>`).join('')
           }
