@@ -1098,7 +1098,7 @@ table.inv-table {
       </div>
       <div id="user-chip" style="display:none; align-items:center; gap:8px; font-size:13px; color:var(--text-2);">
         <span id="user-chip-name" style="font-weight:600; color:var(--text);"></span>
-        <button onclick="doLogout()" title="Cerrar sesión" style="background:none;border:none;cursor:pointer;font-size:16px;padding:4px;">🚪</button>
+        <button onclick="doLogout()" style="background:none;border:1px solid var(--border);border-radius:6px;cursor:pointer;font-size:12px;font-weight:600;padding:4px 10px;color:var(--text-2);">Salir</button>
       </div>
       <button id="btn-install-pwa" onclick="installPWA()" title="Instalar app" style="display:none;align-items:center;gap:4px;padding:4px 10px;border-radius:20px;border:1px solid var(--accent);background:var(--accent-bg);color:var(--accent);font-size:12px;font-weight:600;cursor:pointer;">⬇ Instalar</button>
       <button class="theme-toggle" id="theme-toggle" onclick="toggleTheme()" title="Cambiar tema"></button>
@@ -1558,6 +1558,48 @@ table.inv-table {
       </div>
     </div>
     <div class="modal-footer"><button class="btn-primary" onclick="crearUsuarioAdmin()">Crear Usuario</button></div>
+  </div>
+</div>
+
+<div class="modal-overlay" id="modal-editar-tienda">
+  <div class="modal">
+    <div class="modal-header"><span class="modal-title">Editar Tienda</span><button class="modal-close" onclick="closeModal('modal-editar-tienda')">✕</button></div>
+    <div class="modal-body">
+      <input type="hidden" id="edit-tienda-id">
+      <div class="form-group"><label class="form-label">Nombre</label><input type="text" class="form-input" id="edit-tienda-nombre"></div>
+      <div class="form-group"><label class="form-label">Slug</label><input type="text" class="form-input" id="edit-tienda-slug" readonly style="background:var(--bg-2,var(--surface)); color:var(--text-2); cursor:default;"></div>
+      <div class="form-group"><label class="form-label">Plan</label>
+        <select class="form-input" id="edit-tienda-plan">
+          <option value="basico">Básico</option>
+          <option value="pro">Pro</option>
+        </select>
+      </div>
+      <div class="form-group"><label class="form-label">Estado</label>
+        <select class="form-input" id="edit-tienda-activo">
+          <option value="1">Activa</option>
+          <option value="0">Inactiva</option>
+        </select>
+      </div>
+    </div>
+    <div class="modal-footer"><button class="btn-primary" onclick="guardarTienda()">Guardar</button></div>
+  </div>
+</div>
+
+<div class="modal-overlay" id="modal-editar-usuario">
+  <div class="modal">
+    <div class="modal-header"><span class="modal-title">Editar Usuario</span><button class="modal-close" onclick="closeModal('modal-editar-usuario')">✕</button></div>
+    <div class="modal-body">
+      <input type="hidden" id="edit-usuario-id">
+      <input type="hidden" id="edit-usuario-tienda-id">
+      <div class="form-group"><label class="form-label">Nombre completo</label><input type="text" class="form-input" id="edit-usuario-nombre"></div>
+      <div class="form-group"><label class="form-label">Rol</label>
+        <select class="form-input" id="edit-usuario-rol">
+          <option value="cajero">Cajero</option>
+          <option value="admin">Admin</option>
+        </select>
+      </div>
+    </div>
+    <div class="modal-footer"><button class="btn-primary" onclick="guardarUsuario()">Guardar</button></div>
   </div>
 </div>
 
@@ -3228,8 +3270,10 @@ async function renderSuperadmin() {
                 <td style="padding:10px 12px;">${esc(t.plan)}</td>
                 <td style="padding:10px 12px; text-align:right;">${t.num_usuarios}</td>
                 <td style="padding:10px 12px;">${t.activo ? '🟢 Activa' : '🔴 Inactiva'}</td>
-                <td style="padding:10px 12px;">
+                <td style="padding:10px 12px; display:flex; gap:6px; flex-wrap:wrap;">
                   <button class="btn-secondary" style="font-size:12px; padding:4px 8px;" onclick="event.stopPropagation(); verDetalleTienda(${t.id})">Ver →</button>
+                  <button class="btn-secondary" style="font-size:12px; padding:4px 8px;" onclick="event.stopPropagation(); abrirEditarTienda(${t.id},'${esc(t.nombre)}','${esc(t.slug)}','${esc(t.plan)}',${t.activo})">Editar</button>
+                  <button class="btn-secondary" style="font-size:12px; padding:4px 8px; color:var(--danger);" onclick="event.stopPropagation(); eliminarTienda(${t.id},'${esc(t.nombre)}')">Eliminar</button>
                 </td>
               </tr>`).join('')
             }
@@ -3281,8 +3325,10 @@ async function verDetalleTienda(tiendaId) {
             <td style="padding:10px 12px; color:var(--text-2);">${esc(u.username)}</td>
             <td style="padding:10px 12px;">${esc(u.rol)}</td>
             <td style="padding:10px 12px;">${u.activo ? '✅ Activo' : '⛔ Inactivo'}</td>
-            <td style="padding:10px 12px;">
+            <td style="padding:10px 12px; display:flex; gap:6px; flex-wrap:wrap;">
               <button class="btn-secondary" style="font-size:12px; padding:4px 8px;" onclick="toggleUsuarioActivo(${u.id},${u.activo ? 0 : 1},${tiendaId})">${u.activo ? 'Desactivar' : 'Activar'}</button>
+              <button class="btn-secondary" style="font-size:12px; padding:4px 8px;" onclick="abrirEditarUsuario(${u.id},'${esc(u.nombre)}','${esc(u.rol)}',${tiendaId})">Editar</button>
+              <button class="btn-secondary" style="font-size:12px; padding:4px 8px; color:var(--danger);" onclick="eliminarUsuario(${u.id},'${esc(u.nombre)}',${tiendaId})">Eliminar</button>
             </td>
           </tr>`).join('')
           }
@@ -3349,6 +3395,77 @@ async function toggleUsuarioActivo(userId, nuevoActivo, tiendaId) {
   await verDetalleTienda(tiendaId);
 }
 
+function abrirEditarTienda(id, nombre, slug, plan, activo) {
+  document.getElementById('edit-tienda-id').value = id;
+  document.getElementById('edit-tienda-nombre').value = nombre;
+  document.getElementById('edit-tienda-slug').value = slug;
+  document.getElementById('edit-tienda-plan').value = plan;
+  document.getElementById('edit-tienda-activo').value = String(activo);
+  openModal('modal-editar-tienda');
+}
+
+async function guardarTienda() {
+  const id     = parseInt(document.getElementById('edit-tienda-id').value);
+  const nombre = document.getElementById('edit-tienda-nombre').value.trim();
+  const plan   = document.getElementById('edit-tienda-plan').value;
+  const activo = parseInt(document.getElementById('edit-tienda-activo').value);
+  if (!nombre) { showToast('⚠ El nombre no puede estar vacío'); return; }
+  const res = await apiFetch(`/api/tiendas/${id}`, {
+    method:'PUT',
+    body: JSON.stringify({nombre, plan, activo})
+  });
+  if (!res) return;
+  if (!res.ok) { const d = await res.json(); showToast('⚠ ' + d.error); return; }
+  closeModal('modal-editar-tienda');
+  showToast('✅ Tienda actualizada');
+  await renderSuperadmin();
+}
+
+async function eliminarTienda(id, nombre) {
+  if (!confirm(`¿Eliminar "${nombre}"?\n\nEsto eliminará también todos sus usuarios y productos. Esta acción no se puede deshacer.`)) return;
+  const res = await apiFetch(`/api/tiendas/${id}`, { method:'DELETE' });
+  if (!res) return;
+  if (!res.ok) { const d = await res.json(); showToast('⚠ ' + d.error); return; }
+  showToast('✅ Tienda eliminada');
+  await renderSuperadmin();
+}
+
+function abrirEditarUsuario(id, nombre, rol, tiendaId) {
+  document.getElementById('edit-usuario-id').value = id;
+  document.getElementById('edit-usuario-tienda-id').value = tiendaId ?? '';
+  document.getElementById('edit-usuario-nombre').value = nombre;
+  document.getElementById('edit-usuario-rol').value = rol === 'admin' ? 'admin' : 'cajero';
+  openModal('modal-editar-usuario');
+}
+
+async function guardarUsuario() {
+  const id      = parseInt(document.getElementById('edit-usuario-id').value);
+  const tiendaId = document.getElementById('edit-usuario-tienda-id').value;
+  const nombre  = document.getElementById('edit-usuario-nombre').value.trim();
+  const rol     = document.getElementById('edit-usuario-rol').value;
+  if (!nombre) { showToast('⚠ El nombre no puede estar vacío'); return; }
+  const res = await apiFetch(`/api/usuarios/${id}`, {
+    method:'PUT',
+    body: JSON.stringify({nombre, rol})
+  });
+  if (!res) return;
+  if (!res.ok) { const d = await res.json(); showToast('⚠ ' + d.error); return; }
+  closeModal('modal-editar-usuario');
+  showToast('✅ Usuario actualizado');
+  if (tiendaId) await verDetalleTienda(parseInt(tiendaId));
+  else await renderPanelUsuarios();
+}
+
+async function eliminarUsuario(id, nombre, tiendaId) {
+  if (!confirm(`¿Eliminar al usuario "${nombre}"?`)) return;
+  const res = await apiFetch(`/api/usuarios/${id}`, { method:'DELETE' });
+  if (!res) return;
+  if (!res.ok) { const d = await res.json(); showToast('⚠ ' + d.error); return; }
+  showToast('✅ Usuario eliminado');
+  if (tiendaId) await verDetalleTienda(tiendaId);
+  else await renderPanelUsuarios();
+}
+
 async function renderPanelUsuarios() {
   const list = document.getElementById('usuarios-list');
   if (!list) return;
@@ -3378,7 +3495,11 @@ async function renderPanelUsuarios() {
             <td style="padding:10px 12px;">${esc(u.rol)}</td>
             <td style="padding:10px 12px;">${u.activo ? '✅ Activo' : '⛔ Inactivo'}</td>
             <td style="padding:10px 12px; display:flex; gap:6px; flex-wrap:wrap;">
-              ${u.id !== currentUser?.id ? `<button class="btn-secondary" style="font-size:12px; padding:4px 8px;" onclick="toggleUsuarioActivoAdmin(${u.id}, ${u.activo ? 0 : 1})">${u.activo ? 'Desactivar' : 'Activar'}</button>` : '(yo)'}
+              ${u.id !== currentUser?.id
+                ? `<button class="btn-secondary" style="font-size:12px; padding:4px 8px;" onclick="toggleUsuarioActivoAdmin(${u.id}, ${u.activo ? 0 : 1})">${u.activo ? 'Desactivar' : 'Activar'}</button>
+                   <button class="btn-secondary" style="font-size:12px; padding:4px 8px;" onclick="abrirEditarUsuario(${u.id},'${esc(u.nombre)}','${esc(u.rol)}',null)">Editar</button>
+                   <button class="btn-secondary" style="font-size:12px; padding:4px 8px; color:var(--danger);" onclick="eliminarUsuario(${u.id},'${esc(u.nombre)}',null)">Eliminar</button>`
+                : '(yo)'}
             </td>
           </tr>`).join('')
           }

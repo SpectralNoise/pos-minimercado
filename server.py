@@ -640,6 +640,10 @@ class Handler(BaseHTTPRequestHandler):
         parts = self.path.split("/")
         if len(parts) == 4 and parts[2] == "productos":
             self._delete_producto(parts[3])
+        elif len(parts) == 4 and parts[2] == "tiendas" and parts[3].isdigit():
+            self._delete_tienda(int(parts[3]))
+        elif len(parts) == 4 and parts[2] == "usuarios" and parts[3].isdigit():
+            self._delete_usuario(int(parts[3]))
         else:
             self.send_error_json("Ruta no encontrada", 404)
 
@@ -1234,6 +1238,48 @@ Al final, un consejo breve sobre los productos sin rotación."""
                 conn.close()
         except Exception as e:
             self.send_error_json(str(e), 500)
+
+    def _delete_tienda(self, tienda_id):
+        ctx = self.require_auth()
+        if not ctx: return
+        if ctx.rol != 'superadmin':
+            self.send_error_json("Acceso denegado", 403); return
+        conn = get_db()
+        try:
+            t = conn.execute("SELECT id FROM tiendas WHERE id=?", (tienda_id,)).fetchone()
+            if not t:
+                self.send_error_json("Tienda no encontrada", 404); return
+            conn.execute("DELETE FROM usuarios WHERE tienda_id=?", (tienda_id,))
+            conn.execute("DELETE FROM productos WHERE tienda_id=?", (tienda_id,))
+            conn.execute("DELETE FROM tiendas WHERE id=?", (tienda_id,))
+            conn.commit()
+            self.send_json({"ok": True})
+        except Exception as e:
+            self.send_error_json(str(e), 500)
+        finally:
+            conn.close()
+
+    def _delete_usuario(self, user_id):
+        ctx = self.require_auth()
+        if not ctx: return
+        if ctx.rol not in ('admin', 'superadmin'):
+            self.send_error_json("Acceso denegado", 403); return
+        conn = get_db()
+        try:
+            target = conn.execute("SELECT * FROM usuarios WHERE id=?", (user_id,)).fetchone()
+            if not target:
+                self.send_error_json("Usuario no encontrado", 404); return
+            if ctx.rol == 'admin' and target["tienda_id"] != ctx.tienda_id:
+                self.send_error_json("Acceso denegado", 403); return
+            if user_id == ctx.user_id:
+                self.send_error_json("No puedes eliminarte a ti mismo", 400); return
+            conn.execute("DELETE FROM usuarios WHERE id=?", (user_id,))
+            conn.commit()
+            self.send_json({"ok": True})
+        except Exception as e:
+            self.send_error_json(str(e), 500)
+        finally:
+            conn.close()
 
     def _list_tienda_usuarios(self, tienda_id):
         ctx = self.require_auth()
