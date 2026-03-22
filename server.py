@@ -440,6 +440,8 @@ class Handler(BaseHTTPRequestHandler):
             self._auth_me()
         elif path == "/api/tiendas":
             self._list_tiendas()
+        elif path == "/api/usuarios":
+            self._list_usuarios()
         elif path.startswith("/api/tiendas/") and path.endswith("/usuarios"):
             parts = path.split("/")
             if len(parts) == 5 and parts[3].isdigit():
@@ -571,6 +573,8 @@ class Handler(BaseHTTPRequestHandler):
             self._open_turno()
         elif self.path == "/api/tiendas":
             self._create_tienda()
+        elif self.path == "/api/usuarios":
+            self._create_usuario()
         elif self.path.startswith("/api/tiendas/") and self.path.endswith("/usuarios"):
             parts = self.path.split("/")
             if len(parts) == 5 and parts[3].isdigit():
@@ -589,6 +593,10 @@ class Handler(BaseHTTPRequestHandler):
             self._close_turno(int(parts[3]))
         elif len(parts) == 4 and parts[2] == "tiendas" and parts[3].isdigit():
             self._update_tienda(int(parts[3]))
+        elif len(parts) == 4 and parts[2] == "usuarios" and parts[3].isdigit():
+            self._update_usuario(int(parts[3]))
+        elif len(parts) == 5 and parts[2] == "usuarios" and parts[4] == "password" and parts[3].isdigit():
+            self._update_usuario_password(int(parts[3]))
         else:
             self.send_error_json("Ruta no encontrada", 404)
 
@@ -1222,6 +1230,140 @@ Al final, un consejo breve sobre los productos sin rotación."""
                 ).fetchone()
                 conn.commit()
                 self.send_json(row_to_dict(user), 201)
+            finally:
+                conn.close()
+        except Exception as e:
+            self.send_error_json(str(e), 500)
+
+
+    # ── USUARIOS ────────────────────────────────────────────────────
+    def _list_usuarios(self):
+        ctx = self.require_auth()
+        if not ctx: return
+        if ctx.rol not in ('admin','superadmin'):
+            self.send_error_json("Acceso denegado", 403); return
+        try:
+            conn = get_db()
+            try:
+                if ctx.rol == 'superadmin':
+                    rows = conn.execute(
+                        "SELECT id,tienda_id,nombre,username,rol,activo,created_at FROM usuarios ORDER BY nombre"
+                    ).fetchall()
+                else:
+                    rows = conn.execute(
+                        "SELECT id,tienda_id,nombre,username,rol,activo,created_at FROM usuarios WHERE tienda_id=? ORDER BY nombre",
+                        (ctx.tienda_id,)
+                    ).fetchall()
+                self.send_json([row_to_dict(r) for r in rows])
+            finally:
+                conn.close()
+        except Exception as e:
+            self.send_error_json(str(e), 500)
+
+    def _create_usuario(self):
+        ctx = self.require_auth()
+        if not ctx: return
+        if ctx.rol not in ('admin','superadmin'):
+            self.send_error_json("Acceso denegado", 403); return
+        try:
+            body = self.read_json_body()
+            nombre = body.get("nombre","").strip()
+            username = body.get("username","").strip().lower()
+            password = body.get("password","")
+            rol = body.get("rol","cajero")
+            if not nombre or not username or not password:
+                self.send_error_json("Faltan campos requeridos"); return
+            # Admin no puede crear superadmins
+            if rol == 'superadmin' and ctx.rol != 'superadmin':
+                self.send_error_json("No puedes crear usuarios superadmin", 403); return
+            if rol not in ('admin','cajero','superadmin'):
+                self.send_error_json("Rol inválido", 400); return
+            # Admin siempre crea en su propia tienda
+            tienda_id = ctx.tienda_id if ctx.rol != 'superadmin' else body.get("tienda_id")
+            salt = secrets.token_hex(16)
+            password_hash = _hash_password(password, salt)
+            conn = get_db()
+            try:
+                c = conn.cursor()
+                c.execute(
+                    "INSERT INTO usuarios (tienda_id,nombre,username,password_hash,salt,rol) VALUES (?,?,?,?,?,?)",
+                    (tienda_id, nombre, username, password_hash, salt, rol)
+                )
+                user = conn.execute(
+                    "SELECT id,tienda_id,nombre,username,rol,activo,created_at FROM usuarios WHERE id=?",
+                    (c.lastrowid,)
+                ).fetchone()
+                conn.commit()
+                self.send_json(row_to_dict(user), 201)
+            finally:
+                conn.close()
+        except Exception as e:
+            self.send_error_json(str(e), 500)
+
+    def _update_usuario(self, user_id):
+        ctx = self.require_auth()
+        if not ctx: return
+        if ctx.rol not in ('admin','superadmin'):
+            self.send_error_json("Acceso denegado", 403); return
+        try:
+            body = self.read_json_body()
+            conn = get_db()
+            try:
+                target = conn.execute("SELECT * FROM usuarios WHERE id=?", (user_id,)).fetchone()
+                if not target:
+                    self.send_error_json("Usuario no encontrado", 404); return
+                # Admin solo puede modificar usuarios de su tienda
+                if ctx.rol == 'admin' and target["tienda_id"] != ctx.tienda_id:
+                    self.send_error_json("Acceso denegado", 403); return
+                # Bloquear auto-escalación de rol
+                if "rol" in body and body["rol"] == "superadmin" and ctx.rol != 'superadmin':
+                    self.send_error_json("No puedes asignar rol superadmin", 403); return
+                # Bloquear auto-cambio de rol propio
+                if "rol" in body and user_id == ctx.user_id:
+                    self.send_error_json("No puedes cambiar tu propio rol", 403); return
+                nuevo_rol = body.get("rol", target["rol"])
+                nuevo_nombre = body.get("nombre", target["nombre"])
+                nuevo_activo = int(body.get("activo", target["activo"]))
+                conn.execute(
+                    "UPDATE usuarios SET nombre=?, rol=?, activo=? WHERE id=?",
+                    (nuevo_nombre, nuevo_rol, nuevo_activo, user_id)
+                )
+                user = conn.execute(
+                    "SELECT id,tienda_id,nombre,username,rol,activo,created_at FROM usuarios WHERE id=?",
+                    (user_id,)
+                ).fetchone()
+                conn.commit()
+                self.send_json(row_to_dict(user))
+            finally:
+                conn.close()
+        except Exception as e:
+            self.send_error_json(str(e), 500)
+
+    def _update_usuario_password(self, user_id):
+        ctx = self.require_auth()
+        if not ctx: return
+        if ctx.rol not in ('admin','superadmin'):
+            self.send_error_json("Acceso denegado", 403); return
+        try:
+            body = self.read_json_body()
+            new_password = body.get("password","")
+            if not new_password:
+                self.send_error_json("Falta la nueva contraseña"); return
+            conn = get_db()
+            try:
+                target = conn.execute("SELECT * FROM usuarios WHERE id=?", (user_id,)).fetchone()
+                if not target:
+                    self.send_error_json("Usuario no encontrado", 404); return
+                if ctx.rol == 'admin' and target["tienda_id"] != ctx.tienda_id:
+                    self.send_error_json("Acceso denegado", 403); return
+                salt = secrets.token_hex(16)
+                password_hash = _hash_password(new_password, salt)
+                conn.execute(
+                    "UPDATE usuarios SET password_hash=?, salt=? WHERE id=?",
+                    (password_hash, salt, user_id)
+                )
+                conn.commit()
+                self.send_json({"ok": True})
             finally:
                 conn.close()
         except Exception as e:
