@@ -147,6 +147,10 @@ def get_db():
     conn.row_factory = sqlite3.Row
     return conn
 
+def _hash_password(password: str, salt: str) -> str:
+    return hashlib.pbkdf2_hmac('sha256', password.encode(), salt.encode(), 260000).hex()
+
+
 def init_db():
     conn = get_db()
     conn.executescript("""
@@ -214,6 +218,8 @@ def init_db():
             created_at    DATETIME DEFAULT CURRENT_TIMESTAMP,
             UNIQUE (tienda_id, username)
         );
+        CREATE UNIQUE INDEX IF NOT EXISTS uq_usuarios_superadmin_username
+            ON usuarios(username) WHERE tienda_id IS NULL;
     """)
     # Migración: añadir thumbnail si no existe
     try:
@@ -241,7 +247,7 @@ def init_db():
     if conn.execute("SELECT COUNT(*) FROM usuarios").fetchone()[0] == 0:
         _pw = secrets.token_urlsafe(12)
         _salt = secrets.token_hex(16)
-        _hash = hashlib.pbkdf2_hmac('sha256', _pw.encode(), _salt.encode(), 260000).hex()
+        _hash = _hash_password(_pw, _salt)
         conn.execute(
             "INSERT INTO usuarios (tienda_id, nombre, username, password_hash, salt, rol) VALUES (?,?,?,?,?,?)",
             (None, "Super Admin", "admin", _hash, _salt, "superadmin")
@@ -261,10 +267,6 @@ def init_db():
 
 def row_to_dict(row):
     return dict(row)
-
-
-def _hash_password(password: str, salt: str) -> str:
-    return hashlib.pbkdf2_hmac('sha256', password.encode(), salt.encode(), 260000).hex()
 
 
 # ─── SERVIDOR HTTP ─────────────────────────────────────────────────
