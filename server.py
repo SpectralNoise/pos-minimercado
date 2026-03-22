@@ -1224,14 +1224,16 @@ Al final, un consejo breve sobre los productos sin rotación."""
                     "INSERT INTO usuarios (tienda_id,nombre,username,password_hash,salt,rol) VALUES (?,?,?,?,?,?)",
                     (tienda_id, nombre, username, password_hash, salt, rol)
                 )
+                conn.commit()
                 user = conn.execute(
                     "SELECT id,tienda_id,nombre,username,rol,activo,created_at FROM usuarios WHERE id=?",
                     (c.lastrowid,)
                 ).fetchone()
-                conn.commit()
                 self.send_json(row_to_dict(user), 201)
             finally:
                 conn.close()
+        except sqlite3.IntegrityError:
+            self.send_error_json("El nombre de usuario ya existe en esta tienda", 409)
         except Exception as e:
             self.send_error_json(str(e), 500)
 
@@ -1280,6 +1282,8 @@ Al final, un consejo breve sobre los productos sin rotación."""
                 self.send_error_json("Rol inválido", 400); return
             # Admin siempre crea en su propia tienda
             tienda_id = ctx.tienda_id if ctx.rol != 'superadmin' else body.get("tienda_id")
+            if rol != 'superadmin' and tienda_id is None:
+                self.send_error_json("Se requiere tienda_id para roles admin o cajero", 400); return
             salt = secrets.token_hex(16)
             password_hash = _hash_password(password, salt)
             conn = get_db()
@@ -1289,14 +1293,16 @@ Al final, un consejo breve sobre los productos sin rotación."""
                     "INSERT INTO usuarios (tienda_id,nombre,username,password_hash,salt,rol) VALUES (?,?,?,?,?,?)",
                     (tienda_id, nombre, username, password_hash, salt, rol)
                 )
+                conn.commit()
                 user = conn.execute(
                     "SELECT id,tienda_id,nombre,username,rol,activo,created_at FROM usuarios WHERE id=?",
                     (c.lastrowid,)
                 ).fetchone()
-                conn.commit()
                 self.send_json(row_to_dict(user), 201)
             finally:
                 conn.close()
+        except sqlite3.IntegrityError:
+            self.send_error_json("El nombre de usuario ya existe en esta tienda", 409)
         except Exception as e:
             self.send_error_json(str(e), 500)
 
@@ -1328,11 +1334,11 @@ Al final, un consejo breve sobre los productos sin rotación."""
                     "UPDATE usuarios SET nombre=?, rol=?, activo=? WHERE id=?",
                     (nuevo_nombre, nuevo_rol, nuevo_activo, user_id)
                 )
+                conn.commit()
                 user = conn.execute(
                     "SELECT id,tienda_id,nombre,username,rol,activo,created_at FROM usuarios WHERE id=?",
                     (user_id,)
                 ).fetchone()
-                conn.commit()
                 self.send_json(row_to_dict(user))
             finally:
                 conn.close()
