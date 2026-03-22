@@ -5,7 +5,7 @@ Puerto 5051 · Sirve index.html, REST API SQLite, y endpoints de IA
 """
 
 import os, json, mimetypes, ssl, sqlite3, base64, io, urllib.request, urllib.error, socketserver
-import hmac as _hmac, hashlib, time, secrets
+import hmac as _hmac, hashlib, time, secrets  # secrets usado en init_db (seed) y _create_usuario
 from http.server import HTTPServer, BaseHTTPRequestHandler
 from pathlib import Path
 from collections import namedtuple
@@ -251,7 +251,7 @@ class Handler(BaseHTTPRequestHandler):
             expected = _hmac.new(SECRET_KEY.encode(), payload.encode(), hashlib.sha256).hexdigest()
             if not _hmac.compare_digest(expected, signature):
                 self.send_error_json("Token inválido", 401); return None
-            user_id_s, tienda_str, rol, exp_s = payload.split(":")
+            user_id_s, tienda_str, rol, exp_s = payload.split(":", 3)
             if int(exp_s) < int(time.time()):
                 self.send_error_json("Sesión expirada", 401); return None
             tienda_id = None if tienda_str == "null" else int(tienda_str)
