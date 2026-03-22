@@ -1043,7 +1043,32 @@ table.inv-table {
 </style>
 </head>
 <body>
-<div id="app">
+
+<!-- PANTALLA DE LOGIN -->
+<div id="login-screen" style="display:none; position:fixed; inset:0; z-index:9999; background:var(--bg); flex-direction:column; align-items:center; justify-content:center; padding:24px;">
+  <div style="width:100%; max-width:380px;">
+    <div style="text-align:center; margin-bottom:32px;">
+      <div style="font-size:48px; margin-bottom:8px;">🛒</div>
+      <div style="font-family:var(--ff-disp); font-size:32px; font-weight:800; letter-spacing:-.02em; color:var(--text)">SFPOS</div>
+      <div style="font-size:13px; color:var(--text-2); margin-top:4px;">Sistema de Punto de Venta</div>
+    </div>
+    <div style="background:var(--surface); border:1px solid var(--border); border-radius:16px; padding:28px 24px;">
+      <div style="margin-bottom:16px;">
+        <label style="display:block; font-size:12px; font-weight:600; text-transform:uppercase; letter-spacing:.07em; color:var(--text-2); margin-bottom:6px;">Usuario</label>
+        <input type="text" id="login-username" class="form-input" placeholder="Ej: admin" autocomplete="username" autocapitalize="none" style="width:100%; box-sizing:border-box;">
+      </div>
+      <div style="margin-bottom:20px;">
+        <label style="display:block; font-size:12px; font-weight:600; text-transform:uppercase; letter-spacing:.07em; color:var(--text-2); margin-bottom:6px;">Contraseña</label>
+        <input type="password" id="login-password" class="form-input" placeholder="••••••••" autocomplete="current-password" style="width:100%; box-sizing:border-box;">
+      </div>
+      <div id="login-error" style="display:none; color:var(--danger); font-size:13px; margin-bottom:12px; padding:8px 12px; background:var(--danger-bg,#fee2e2); border-radius:8px;"></div>
+      <button id="login-btn" class="btn-cobrar" onclick="doLogin()" style="width:100%;">Ingresar</button>
+    </div>
+    <div style="text-align:center; margin-top:16px; font-size:12px; color:var(--text-3);">SFPOS v1.0 · sfpos.app</div>
+  </div>
+</div>
+
+<div id="app" style="display:none;">
 
   <!-- TOP NAV -->
   <nav id="topnav">
@@ -1070,6 +1095,10 @@ table.inv-table {
         <button class="mode-btn cajero active" id="mode-cajero" onclick="setMode('cajero')">🛒 Cajero</button>
         <button class="mode-btn" id="mode-admin" onclick="setMode('admin')">⚙ Admin</button>
       </div>
+      <div id="user-chip" style="display:none; align-items:center; gap:8px; font-size:13px; color:var(--text-2);">
+        <span id="user-chip-name" style="font-weight:600; color:var(--text);"></span>
+        <button onclick="doLogout()" title="Cerrar sesión" style="background:none;border:none;cursor:pointer;font-size:16px;padding:4px;">🚪</button>
+      </div>
       <button id="btn-install-pwa" onclick="installPWA()" title="Instalar app" style="display:none;align-items:center;gap:4px;padding:4px 10px;border-radius:20px;border:1px solid var(--accent);background:var(--accent-bg);color:var(--accent);font-size:12px;font-weight:600;cursor:pointer;">⬇ Instalar</button>
       <button class="theme-toggle" id="theme-toggle" onclick="toggleTheme()" title="Cambiar tema"></button>
       <div class="status-dot" title="Sistema activo"></div>
@@ -1085,6 +1114,10 @@ table.inv-table {
     <div class="caja-info" id="caja-info"></div>
     <button class="btn-apertura" id="btn-apertura" onclick="openModal('modal-apertura')">Abrir Caja</button>
     <button class="btn-cierre" id="btn-cierre" onclick="openCierreModal()" style="display:none">Cerrar Caja</button>
+  </div>
+
+  <div id="session-expiry-banner" style="display:none; background:var(--warning-bg,#fef3c7); color:var(--warning,#92400e); padding:8px 20px; font-size:13px; text-align:center;">
+    ⏰ Tu sesión expira en menos de 1 hora. Guarda cambios.
   </div>
 
   <!-- SCREEN: COBRO -->
@@ -1146,6 +1179,7 @@ table.inv-table {
       </div>
       <button class="btn-secondary" onclick="exportCSV()">⬇ CSV</button>
       <button class="btn-secondary" id="btn-pedido" onclick="generarPedido()" title="IA sugiere qué pedir esta semana">🛒 ¿Qué pedir?</button>
+      <button class="btn-secondary" id="btn-refresh-inv" onclick="recargarInventario()" title="Actualizar inventario">🔄</button>
       <button class="btn-primary" onclick="openProdModal()">+ Nuevo</button>
     </div>
     <div class="inv-stats">
@@ -1250,6 +1284,22 @@ table.inv-table {
         </div>
       </div>
     </div>
+  </div>
+
+  <div class="screen" id="screen-superadmin" style="display:none; flex-direction:column; overflow-y:auto;">
+    <div style="padding:32px 24px;">
+      <h2 style="font-family:var(--ff-disp); font-size:20px; font-weight:700; margin-bottom:8px;">Panel Superadmin</h2>
+      <p style="color:var(--text-2); font-size:14px; margin-bottom:24px;">Gestión de tiendas y usuarios de la plataforma SFPOS.</p>
+      <div id="superadmin-content">Cargando...</div>
+    </div>
+  </div>
+
+  <div class="screen" id="screen-usuarios" style="flex-direction:column; overflow-y:auto; padding:24px;">
+    <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:20px;">
+      <span class="page-title">Usuarios</span>
+      <button class="btn-primary" onclick="openModal('modal-nuevo-usuario-admin')">+ Nuevo Usuario</button>
+    </div>
+    <div id="usuarios-list">Cargando...</div>
   </div>
 
 </div><!-- #app -->
@@ -1377,7 +1427,7 @@ table.inv-table {
 
       <div class="form-group" style="margin-bottom:14px">
         <label style="font-size:12px;text-transform:uppercase;letter-spacing:.07em;color:var(--text-2);font-family:var(--ff-disp);font-weight:600">Nombre del cajero</label>
-        <input type="text" class="form-input" id="apertura-cajero" placeholder="Ej: María García" autocomplete="off">
+        <input type="text" class="form-input" id="apertura-cajero" placeholder="Ej: María García" autocomplete="off" readonly style="background:var(--bg-2,var(--surface)); color:var(--text-2); cursor:default;">
       </div>
 
       <div class="pay-label">Efectivo inicial en caja</div>
@@ -1457,6 +1507,60 @@ table.inv-table {
   </div>
 </div>
 
+<div class="modal-overlay" id="modal-nueva-tienda">
+  <div class="modal">
+    <div class="modal-header"><span class="modal-title">Nueva Tienda</span><button class="modal-close" onclick="closeModal('modal-nueva-tienda')">✕</button></div>
+    <div class="modal-body">
+      <div class="form-group"><label class="form-label">Nombre</label><input type="text" class="form-input" id="tienda-nombre" placeholder="Ej: Minimercado La 45"></div>
+      <div class="form-group"><label class="form-label">Slug</label><input type="text" class="form-input" id="tienda-slug" placeholder="Ej: la-45"></div>
+      <div class="form-group"><label class="form-label">Plan</label>
+        <select class="form-input" id="tienda-plan">
+          <option value="basico">Básico</option>
+          <option value="pro">Pro</option>
+        </select>
+      </div>
+    </div>
+    <div class="modal-footer"><button class="btn-primary" onclick="crearTienda()">Crear Tienda</button></div>
+  </div>
+</div>
+
+<div class="modal-overlay" id="modal-nuevo-usuario-sa">
+  <div class="modal">
+    <div class="modal-header"><span class="modal-title">Nuevo Usuario</span><button class="modal-close" onclick="closeModal('modal-nuevo-usuario-sa')">✕</button></div>
+    <div class="modal-body">
+      <div class="form-group"><label class="form-label">Nombre</label><input type="text" class="form-input" id="sa-user-nombre" placeholder="Ej: María García"></div>
+      <div class="form-group"><label class="form-label">Usuario</label><input type="text" class="form-input" id="sa-user-username" placeholder="Ej: maria" autocapitalize="none"></div>
+      <div class="form-group"><label class="form-label">Contraseña</label><input type="password" class="form-input" id="sa-user-password"></div>
+      <div class="form-group"><label class="form-label">Rol</label>
+        <select class="form-input" id="sa-user-rol">
+          <option value="cajero">Cajero</option>
+          <option value="admin">Admin</option>
+        </select>
+      </div>
+      <input type="hidden" id="sa-user-tienda-id">
+    </div>
+    <div class="modal-footer"><button class="btn-primary" onclick="crearUsuarioSA()">Crear Usuario</button></div>
+  </div>
+</div>
+
+<div class="modal-overlay" id="modal-nuevo-usuario-admin">
+  <div class="modal">
+    <div class="modal-header"><span class="modal-title">Nuevo Usuario</span><button class="modal-close" onclick="closeModal('modal-nuevo-usuario-admin')">✕</button></div>
+    <div class="modal-body">
+      <div class="form-group"><label class="form-label">Nombre completo</label><input type="text" class="form-input" id="admin-user-nombre" placeholder="Ej: Juan Cajero"></div>
+      <div class="form-group"><label class="form-label">Usuario</label><input type="text" class="form-input" id="admin-user-username" placeholder="Ej: juan" autocapitalize="none"></div>
+      <div class="form-group"><label class="form-label">Contraseña</label><input type="password" class="form-input" id="admin-user-password"></div>
+      <div class="form-group"><label class="form-label">Rol</label>
+        <select class="form-input" id="admin-user-rol">
+          <option value="cajero">Cajero</option>
+          <option value="admin">Admin</option>
+        </select>
+      </div>
+    </div>
+    <div class="modal-footer"><button class="btn-primary" onclick="crearUsuarioAdmin()">Crear Usuario</button></div>
+  </div>
+</div>
+
 <!-- OVERLAY: CÁMARA SCANNER -->
 <div class="cam-overlay" id="cam-overlay">
   <div class="cam-header-bar">
@@ -1480,6 +1584,82 @@ table.inv-table {
 <div class="toast" id="toast"></div>
 
 <script>
+// ─── AUTH ──────────────────────────────────────
+let currentUser = null;
+// { id, nombre, username, rol, tienda_id } — tienda_id === null para superadmin
+
+async function apiFetch(url, options = {}) {
+  const token = localStorage.getItem('sfpos_token');
+  const headers = { 'Content-Type': 'application/json', ...(options.headers || {}) };
+  if (token) headers['Authorization'] = `Bearer ${token}`;
+  const res = await fetch(url, { ...options, headers });
+  if (res.status === 401) {
+    ['sfpos_token','sfpos_exp','sfpos_user','sfpos_tienda'].forEach(k => localStorage.removeItem(k));
+    showLoginScreen('Sesión expirada. Ingresa de nuevo.');
+    return null;
+  }
+  return res;
+}
+
+// ─── LOGIN / LOGOUT ─────────────────────────────
+function showLoginScreen(msg = '') {
+  document.getElementById('app').style.display = 'none';
+  document.getElementById('login-screen').style.display = 'flex';
+  const errEl = document.getElementById('login-error');
+  if (msg) { errEl.textContent = msg; errEl.style.display = 'block'; }
+  else { errEl.style.display = 'none'; }
+  document.getElementById('login-username').focus();
+}
+
+async function doLogin() {
+  const username = document.getElementById('login-username').value.trim();
+  const password = document.getElementById('login-password').value;
+  const errEl = document.getElementById('login-error');
+  const btn = document.getElementById('login-btn');
+  errEl.style.display = 'none';
+  if (!username || !password) {
+    errEl.textContent = 'Ingresa usuario y contraseña'; errEl.style.display = 'block'; return;
+  }
+  btn.disabled = true; btn.textContent = 'Ingresando...';
+  try {
+    const res = await fetch('/api/auth/login', {
+      method: 'POST',
+      headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({username, password})
+    });
+    const data = await res.json();
+    if (!res.ok) {
+      errEl.textContent = data.error || 'Credenciales incorrectas';
+      errEl.style.display = 'block'; return;
+    }
+    localStorage.setItem('sfpos_token',  data.token);
+    localStorage.setItem('sfpos_exp',    String(data.exp));
+    localStorage.setItem('sfpos_user',   JSON.stringify(data.user));
+    localStorage.setItem('sfpos_tienda', JSON.stringify(data.tienda));
+    await iniciarApp(data.user, data.tienda);
+  } catch(e) {
+    errEl.textContent = 'Error de conexión'; errEl.style.display = 'block';
+  } finally {
+    btn.disabled = false; btn.textContent = 'Ingresar';
+  }
+}
+
+// Enter en campos de login dispara doLogin
+document.getElementById('login-password').addEventListener('keydown', e => {
+  if (e.key === 'Enter') doLogin();
+});
+document.getElementById('login-username').addEventListener('keydown', e => {
+  if (e.key === 'Enter') document.getElementById('login-password').focus();
+});
+
+function doLogout() {
+  if (cajaSession) { showToast('⚠ Cierra la caja antes de cerrar sesión'); return; }
+  if (!confirm('¿Cerrar sesión?')) return;
+  if (_expiryCheckInterval) { clearInterval(_expiryCheckInterval); _expiryCheckInterval = null; }
+  ['sfpos_token','sfpos_exp','sfpos_user','sfpos_tienda'].forEach(k => localStorage.removeItem(k));
+  location.reload();
+}
+
 // ─── DATOS (cargados desde API) ─────────────────
 let products = [];
 let _placeHolder = [
@@ -1528,14 +1708,14 @@ function normalizarVenta(v) {
 async function loadData() {
   try {
     const [pRes, vRes, tRes] = await Promise.all([
-      fetch('/api/productos'),
-      fetch('/api/ventas'),
-      fetch('/api/turnos/activo')
+      apiFetch('/api/productos'),
+      apiFetch('/api/ventas'),
+      apiFetch('/api/turnos/activo')
     ]);
+    if (!pRes || !vRes || !tRes) return; // sesión expirada
     products = await pRes.json();
     sales    = (await vRes.json()).map(normalizarVenta);
     const turnoActivo = await tRes.json();
-
     if (turnoActivo && turnoActivo.id) {
       cajaSession = {
         id:           turnoActivo.id,
@@ -1588,6 +1768,7 @@ function switchScreen(name) {
   if (name === 'inventario') renderInventario();
   if (name === 'reportes') renderReportes();
   if (name === 'cobro') document.getElementById('search-input').focus();
+  if (name === 'usuarios') renderPanelUsuarios();
 }
 
 // ─── RELOJ ────────────────────────────────────
@@ -1821,7 +2002,8 @@ function closeCameraScanner() {
 async function lookupAndOffer(barcode) {
   showToast(`🔍 Buscando código ${barcode}...`);
   try {
-    const res  = await fetch(`/api/lookup-barcode/${encodeURIComponent(barcode)}`);
+    const res  = await apiFetch(`/api/lookup-barcode/${encodeURIComponent(barcode)}`);
+    if (!res) return;
     const data = await res.json();
     if (!data.found) {
       showToast(`⚠ Código no encontrado: ${barcode}`);
@@ -1861,7 +2043,8 @@ async function lookupFillModal(barcode) {
   const status = document.getElementById('analyze-status');
   if (status) status.textContent = '🔍 Buscando en base de datos...';
   try {
-    const res  = await fetch(`/api/lookup-barcode/${encodeURIComponent(barcode)}`);
+    const res  = await apiFetch(`/api/lookup-barcode/${encodeURIComponent(barcode)}`);
+    if (!res) return;
     const data = await res.json();
     if (!data.found) {
       if (status) status.textContent = '';
@@ -2041,7 +2224,7 @@ async function completarVenta() {
     : total;
 
   try {
-    const res = await fetch('/api/ventas', {
+    const res = await apiFetch('/api/ventas', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
@@ -2052,11 +2235,13 @@ async function completarVenta() {
         items: cart.map(i => ({ id: i.id, name: i.name, emoji: i.emoji, qty: i.qty, price: i.price }))
       })
     });
+    if (!res) return;
     const data = await res.json();
     if (!res.ok) throw new Error(data.error);
 
     // Recargar productos para reflejar stock actualizado
-    const pRes = await fetch('/api/productos');
+    const pRes = await apiFetch('/api/productos');
+    if (!pRes) return;
     products = await pRes.json();
 
     lastSale = {
@@ -2234,6 +2419,21 @@ function calcVelocidades() {
   return vel;
 }
 
+async function recargarInventario() {
+  const btn = document.getElementById('btn-refresh-inv');
+  if (btn) btn.disabled = true;
+  try {
+    const res = await apiFetch('/api/productos');
+    if (!res) return;
+    if (!res.ok) { showToast('⚠ Error al actualizar'); return; }
+    products = await res.json();
+    renderInventario();
+    showToast('✅ Inventario actualizado');
+  } finally {
+    if (btn) btn.disabled = false;
+  }
+}
+
 function renderInventario() {
   const q = document.getElementById('inv-search').value.toLowerCase();
   const filtered = products.filter(p => !q || p.name.toLowerCase().includes(q) || p.barcode.includes(q));
@@ -2317,10 +2517,11 @@ async function generarPedido() {
   document.getElementById('modal-pedido').classList.add('open');
 
   try {
-    const res = await fetch('/api/ai-pedido', {
+    const res = await apiFetch('/api/ai-pedido', {
       method: 'POST', headers: {'Content-Type':'application/json'},
       body: JSON.stringify({ criticos: [...agotados, ...criticos], bajos, sin_rotacion: sinRot })
     });
+    if (!res) return;
     const data = await res.json();
     document.getElementById('pedido-ia-texto').textContent = data.pedido || '—';
   } catch(e) {
@@ -2432,11 +2633,12 @@ async function analyzePhoto() {
   status.textContent = 'Consultando Claude Vision...';
 
   try {
-    const res = await fetch('/analyze-product', {
+    const res = await apiFetch('/analyze-product', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ image: currentImageB64, mediaType: currentMediaType })
     });
+    if (!res) return;
     const data = await res.json();
     if (!res.ok || data.error) throw new Error(data.error || 'Error del servidor');
 
@@ -2518,11 +2720,12 @@ async function saveProduct() {
   };
   if (!data.name) { showToast('⚠ Ingresa un nombre'); return; }
   try {
-    const res = await fetch(id ? `/api/productos/${id}` : '/api/productos', {
+    const res = await apiFetch(id ? `/api/productos/${id}` : '/api/productos', {
       method: id ? 'PUT' : 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(data)
     });
+    if (!res) return;
     const saved = await res.json();
     if (!res.ok) throw new Error(saved.error);
     if (id) {
@@ -2545,7 +2748,8 @@ async function saveProduct() {
 async function deleteProduct(id) {
   if (!confirm('¿Eliminar este producto?')) return;
   try {
-    await fetch(`/api/productos/${id}`, { method: 'DELETE' });
+    const delRes = await apiFetch(`/api/productos/${id}`, { method: 'DELETE' });
+    if (!delRes) return;
     products = products.filter(p => p.id !== id);
     renderInventario();
     renderCatPills();
@@ -2645,7 +2849,8 @@ async function renderTurnos() {
   if (currentMode !== 'admin') { section.style.display = 'none'; return; }
 
   try {
-    const res = await fetch('/api/turnos');
+    const res = await apiFetch('/api/turnos');
+    if (!res) return;
     const turnos = await res.json();
     section.style.display = '';
 
@@ -2723,16 +2928,17 @@ let cajaSession = null; // { cajero, inicio, montoInicial, ventasIds[] }
 function openModal(id) { document.getElementById(id).classList.add('open'); }
 
 async function abrirCaja() {
-  const cajero = document.getElementById('apertura-cajero').value.trim();
+  const cajero = currentUser?.nombre || document.getElementById('apertura-cajero').value.trim();
   const monto  = parseMoney('apertura-monto');
   if (!cajero) { showToast('⚠ Ingresa el nombre del cajero'); return; }
 
   try {
-    const res = await fetch('/api/turnos', {
+    const res = await apiFetch('/api/turnos', {
       method: 'POST',
       headers: {'Content-Type':'application/json'},
       body: JSON.stringify({ cajero, monto_inicial: monto })
     });
+    if (!res) return;
     const data = await res.json();
 
     if (res.status === 409) {
@@ -2743,11 +2949,12 @@ async function abrirCaja() {
         `Hay un turno de "${t.cajero}" sin cerrar desde ${fecha}.\n¿Cerrarlo automáticamente y abrir uno nuevo?`
       );
       if (!confirmar) return;
-      const cierreRes = await fetch(`/api/turnos/${t.id}/cierre`, {
+      const cierreRes = await apiFetch(`/api/turnos/${t.id}/cierre`, {
         method: 'PUT',
         headers: {'Content-Type':'application/json'},
         body: JSON.stringify({efectivo_ventas:0,transferencias:0,total_ventas:0,num_tx:0,monto_contado:null,diferencia:null,resumen_ia:null})
       });
+      if (!cierreRes) return;
       if (!cierreRes.ok) { showToast('⚠ No se pudo cerrar el turno anterior'); return; }
       return abrirCaja();
     }
@@ -2792,7 +2999,7 @@ function updateCajaBar() {
   }
 }
 
-function openCierreModal() {
+async function openCierreModal() {
   if (!cajaSession) return;
   const now = new Date();
   const sesVentas = sales.filter(s => cajaSession.ventasIds.includes(s.id));
@@ -2829,16 +3036,19 @@ function openCierreModal() {
   iaSection.style.display = 'block';
   iaTexto.textContent = '⏳ Generando resumen...';
 
-  fetch('/api/ai-cierre', {
-    method: 'POST',
-    headers: {'Content-Type':'application/json'},
-    body: JSON.stringify({ cajero: cajaSession.cajero, duracion_min: durMin,
-      total, efectivo, transf, tx_count: sesVentas.length, top_productos: topProds })
-  }).then(r => r.json()).then(d => {
+  try {
+    const res = await apiFetch('/api/ai-cierre', {
+      method: 'POST',
+      headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({ cajero: cajaSession.cajero, duracion_min: durMin,
+        total, efectivo, transf, tx_count: sesVentas.length, top_productos: topProds })
+    });
+    if (!res) { iaSection.style.display = 'none'; return; }
+    const d = await res.json();
     iaTexto.textContent = d.resumen || '—';
-  }).catch(() => {
+  } catch (_) {
     iaSection.style.display = 'none';
-  });
+  }
 }
 
 function calcDiferencia() {
@@ -2875,7 +3085,7 @@ async function cerrarCaja() {
     ? iaTexto.textContent : null;
 
   try {
-    await fetch(`/api/turnos/${cajaSession.id}/cierre`, {
+    const cierreRes = await apiFetch(`/api/turnos/${cajaSession.id}/cierre`, {
       method: 'PUT',
       headers: {'Content-Type':'application/json'},
       body: JSON.stringify({
@@ -2888,6 +3098,7 @@ async function cerrarCaja() {
         resumen_ia
       })
     });
+    if (!cierreRes) return;
   } catch (e) {
     console.warn('No se pudo guardar el cierre en DB:', e);
   }
@@ -2918,23 +3129,343 @@ const savedTheme = localStorage.getItem('pos-theme');
 if (savedTheme === 'dark') document.documentElement.dataset.theme = 'dark';
 updateThemeIcon();
 
-// Actualizar fecha en modal apertura
-document.getElementById('apertura-fecha').textContent =
-  new Date().toLocaleDateString('es-CO', {weekday:'long', year:'numeric', month:'long', day:'numeric'});
+// ── BOOT ───────────────────────────────────────────────────────────
+async function iniciarApp(user, tienda) {
+  currentUser = user;
+  // Ocultar switcher modo — lo determina el rol
+  document.querySelector('.mode-switcher').style.display = 'none';
+  // Mostrar chip de usuario
+  const chip = document.getElementById('user-chip');
+  document.getElementById('user-chip-name').textContent = user.nombre;
+  chip.style.display = 'flex';
+  // Mostrar app, ocultar login
+  document.getElementById('login-screen').style.display = 'none';
+  document.getElementById('app').style.display = 'flex';
 
-// Aplicar modo guardado
-setMode(currentMode);
-updateCajaBar();
+  if (user.rol === 'superadmin') {
+    // Ocultar nav tabs normales, mostrar pantalla superadmin
+    document.getElementById('tab-cobro').style.display = 'none';
+    document.getElementById('tab-inventario').style.display = 'none';
+    document.getElementById('tab-reportes').style.display = 'none';
+    document.getElementById('caja-bar').style.display = 'none';
+    // Mostrar screen superadmin directamente
+    document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
+    document.getElementById('screen-superadmin').style.display = 'flex';
+    document.getElementById('screen-superadmin').classList.add('active');
+    await renderSuperadmin();
+  } else {
+    // Modo determinado por rol
+    const modo = user.rol === 'admin' ? 'admin' : 'cajero';
+    const campoNombre = document.getElementById('apertura-cajero');
+    if (campoNombre) {
+      campoNombre.value = user.nombre;
+      campoNombre.readOnly = true;
+    }
+    setMode(modo);
+    updateCajaBar();
+    await loadData();
+    renderCatPills();
+    renderProducts();
+    renderCart();
+    renderInventario();
+    renderReportes();
+    updateLowStockBadge();
+    // Si admin, agregar pestaña Usuarios
+    if (user.rol === 'admin') {
+      let tabUsuarios = document.getElementById('tab-usuarios');
+      if (!tabUsuarios) {
+        tabUsuarios = document.createElement('div');
+        tabUsuarios.id = 'tab-usuarios';
+        tabUsuarios.className = 'nav-tab';
+        tabUsuarios.dataset.screen = 'usuarios';
+        tabUsuarios.innerHTML = '<span class="tab-icon">👥</span> Usuarios';
+        tabUsuarios.onclick = () => switchScreen('usuarios');
+        document.getElementById('tab-reportes').after(tabUsuarios);
+      }
+      tabUsuarios.style.display = '';
+    }
+  }
+  iniciarCheckExpiracion();
+}
 
-// Cargar datos desde SQLite y renderizar
+let _expiryCheckInterval = null;
+
+// Stubs temporales — implementados en Tasks 11 y 12
+async function renderSuperadmin() {
+  const content = document.getElementById('superadmin-content');
+  content.innerHTML = '<p style="color:var(--text-2)">Cargando tiendas...</p>';
+  try {
+    const res = await apiFetch('/api/tiendas');
+    if (!res) return;
+    const tiendas = await res.json();
+    content.innerHTML = `
+      <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:16px;">
+        <h3 style="font-size:15px; font-weight:700;">Tiendas (${tiendas.length})</h3>
+        <button class="btn-primary" onclick="openModal('modal-nueva-tienda')">+ Nueva Tienda</button>
+      </div>
+      <div style="overflow-x:auto;">
+        <table style="width:100%; border-collapse:collapse; font-size:14px;">
+          <thead>
+            <tr style="border-bottom:2px solid var(--border); text-align:left;">
+              <th style="padding:8px 12px; color:var(--text-2);">Nombre</th>
+              <th style="padding:8px 12px; color:var(--text-2);">Slug</th>
+              <th style="padding:8px 12px; color:var(--text-2);">Plan</th>
+              <th style="padding:8px 12px; color:var(--text-2); text-align:right;">Usuarios</th>
+              <th style="padding:8px 12px; color:var(--text-2);">Estado</th>
+              <th style="padding:8px 12px; color:var(--text-2);">Acciones</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${tiendas.length === 0
+              ? '<tr><td colspan="6" style="padding:20px; text-align:center; color:var(--text-2)">Sin tiendas registradas</td></tr>'
+              : tiendas.map(t => `
+              <tr style="border-bottom:1px solid var(--border); cursor:pointer;" onclick="verDetalleTienda(${t.id})">
+                <td style="padding:10px 12px; font-weight:600;">${esc(t.nombre)}</td>
+                <td style="padding:10px 12px; color:var(--text-2); font-size:12px;">${esc(t.slug)}</td>
+                <td style="padding:10px 12px;">${esc(t.plan)}</td>
+                <td style="padding:10px 12px; text-align:right;">${t.num_usuarios}</td>
+                <td style="padding:10px 12px;">${t.activo ? '🟢 Activa' : '🔴 Inactiva'}</td>
+                <td style="padding:10px 12px;">
+                  <button class="btn-secondary" style="font-size:12px; padding:4px 8px;" onclick="event.stopPropagation(); verDetalleTienda(${t.id})">Ver →</button>
+                </td>
+              </tr>`).join('')
+            }
+          </tbody>
+        </table>
+      </div>`;
+  } catch(e) {
+    content.innerHTML = '<p style="color:var(--danger)">Error cargando tiendas</p>';
+  }
+}
+
+async function verDetalleTienda(tiendaId) {
+  const content = document.getElementById('superadmin-content');
+  content.innerHTML = '<p style="color:var(--text-2)">Cargando...</p>';
+  try {
+    // Nota: /api/tiendas retorna todas las tiendas (no hay GET /api/tiendas/:id).
+    // Para evitar un endpoint extra en esta fase, obtenemos la lista y buscamos localmente.
+    const [tRes, uRes] = await Promise.all([
+      apiFetch(`/api/tiendas`),
+      apiFetch(`/api/tiendas/${tiendaId}/usuarios`)
+    ]);
+    if (!tRes || !uRes) return;
+    const tiendas = await tRes.json();
+    const tienda = tiendas.find(t => t.id === tiendaId);
+    if (!tienda) { content.innerHTML = '<p style="color:var(--danger)">Tienda no encontrada</p>'; return; }
+    const usuarios = await uRes.json();
+    content.innerHTML = `
+      <button class="btn-secondary" onclick="renderSuperadmin()" style="margin-bottom:16px;">← Volver</button>
+      <h3 style="font-size:16px; font-weight:700; margin-bottom:4px;">${esc(tienda.nombre)}</h3>
+      <p style="color:var(--text-2); font-size:13px; margin-bottom:20px;">${esc(tienda.slug)} · ${esc(tienda.plan)} · ${tienda.activo ? '🟢 Activa' : '🔴 Inactiva'}</p>
+      <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:12px;">
+        <h4 style="font-size:14px; font-weight:700;">Usuarios</h4>
+        <button class="btn-primary" onclick="_abrirModalNuevoUsuarioSA(${tiendaId})">+ Nuevo Usuario</button>
+      </div>
+      <table style="width:100%; border-collapse:collapse; font-size:14px;">
+        <thead><tr style="border-bottom:2px solid var(--border); text-align:left;">
+          <th style="padding:8px 12px; color:var(--text-2);">Nombre</th>
+          <th style="padding:8px 12px; color:var(--text-2);">Usuario</th>
+          <th style="padding:8px 12px; color:var(--text-2);">Rol</th>
+          <th style="padding:8px 12px; color:var(--text-2);">Estado</th>
+          <th style="padding:8px 12px; color:var(--text-2);">Acciones</th>
+        </tr></thead>
+        <tbody>
+          ${usuarios.length === 0
+            ? '<tr><td colspan="5" style="padding:20px; text-align:center; color:var(--text-2)">Sin usuarios registrados</td></tr>'
+            : usuarios.map(u => `
+          <tr style="border-bottom:1px solid var(--border);">
+            <td style="padding:10px 12px;">${esc(u.nombre)}</td>
+            <td style="padding:10px 12px; color:var(--text-2);">${esc(u.username)}</td>
+            <td style="padding:10px 12px;">${esc(u.rol)}</td>
+            <td style="padding:10px 12px;">${u.activo ? '✅ Activo' : '⛔ Inactivo'}</td>
+            <td style="padding:10px 12px;">
+              <button class="btn-secondary" style="font-size:12px; padding:4px 8px;" onclick="toggleUsuarioActivo(${u.id},${u.activo ? 0 : 1},${tiendaId})">${u.activo ? 'Desactivar' : 'Activar'}</button>
+            </td>
+          </tr>`).join('')
+          }
+        </tbody>
+      </table>`;
+  } catch(e) {
+    content.innerHTML = '<p style="color:var(--danger)">Error cargando detalle</p>';
+  }
+}
+
+function _abrirModalNuevoUsuarioSA(tiendaId) {
+  document.getElementById('sa-user-tienda-id').value = tiendaId;
+  document.getElementById('sa-user-nombre').value = '';
+  document.getElementById('sa-user-username').value = '';
+  document.getElementById('sa-user-password').value = '';
+  document.getElementById('sa-user-rol').selectedIndex = 0;
+  openModal('modal-nuevo-usuario-sa');
+}
+
+async function crearTienda() {
+  const nombre = document.getElementById('tienda-nombre').value.trim();
+  const slug   = document.getElementById('tienda-slug').value.trim();
+  const plan   = document.getElementById('tienda-plan').value;
+  if (!nombre || !slug) { showToast('⚠ Ingresa nombre y slug'); return; }
+  const res = await apiFetch('/api/tiendas', {
+    method:'POST',
+    body: JSON.stringify({nombre, slug, plan})
+  });
+  if (!res) return;
+  if (!res.ok) { const d = await res.json(); showToast('⚠ ' + d.error); return; }
+  document.getElementById('tienda-nombre').value = '';
+  document.getElementById('tienda-slug').value = '';
+  document.getElementById('tienda-plan').selectedIndex = 0;
+  closeModal('modal-nueva-tienda');
+  showToast('✅ Tienda creada');
+  await renderSuperadmin();
+}
+
+async function crearUsuarioSA() {
+  const tiendaId = parseInt(document.getElementById('sa-user-tienda-id').value);
+  const nombre   = document.getElementById('sa-user-nombre').value.trim();
+  const username = document.getElementById('sa-user-username').value.trim();
+  const password = document.getElementById('sa-user-password').value;
+  const rol      = document.getElementById('sa-user-rol').value;
+  if (!nombre || !username || !password) { showToast('⚠ Completa todos los campos'); return; }
+  const res = await apiFetch(`/api/tiendas/${tiendaId}/usuarios`, {
+    method:'POST',
+    body: JSON.stringify({nombre, username, password, rol})
+  });
+  if (!res) return;
+  if (!res.ok) { const d = await res.json(); showToast('⚠ ' + d.error); return; }
+  closeModal('modal-nuevo-usuario-sa');
+  showToast('✅ Usuario creado');
+  await verDetalleTienda(tiendaId);
+}
+
+async function toggleUsuarioActivo(userId, nuevoActivo, tiendaId) {
+  const res = await apiFetch(`/api/usuarios/${userId}`, {
+    method:'PUT',
+    body: JSON.stringify({activo: nuevoActivo})
+  });
+  if (!res) return;
+  if (!res.ok) { showToast('⚠ Error al actualizar usuario'); return; }
+  await verDetalleTienda(tiendaId);
+}
+
+async function renderPanelUsuarios() {
+  const list = document.getElementById('usuarios-list');
+  if (!list) return;
+  list.innerHTML = '<p style="color:var(--text-2)">Cargando usuarios...</p>';
+  try {
+    const res = await apiFetch('/api/usuarios');
+    if (!res) return;
+    const usuarios = await res.json();
+    list.innerHTML = `<div style="overflow-x:auto;">
+      <table style="width:100%; border-collapse:collapse; font-size:14px;">
+        <thead>
+          <tr style="border-bottom:2px solid var(--border); text-align:left;">
+            <th style="padding:8px 12px; color:var(--text-2);">Nombre</th>
+            <th style="padding:8px 12px; color:var(--text-2);">Usuario</th>
+            <th style="padding:8px 12px; color:var(--text-2);">Rol</th>
+            <th style="padding:8px 12px; color:var(--text-2);">Estado</th>
+            <th style="padding:8px 12px; color:var(--text-2);">Acciones</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${usuarios.length === 0
+            ? '<tr><td colspan="5" style="padding:20px; text-align:center; color:var(--text-2)">Sin usuarios registrados</td></tr>'
+            : usuarios.map(u => `
+          <tr style="border-bottom:1px solid var(--border);">
+            <td style="padding:10px 12px; font-weight:600;">${esc(u.nombre)}</td>
+            <td style="padding:10px 12px; color:var(--text-2);">${esc(u.username)}</td>
+            <td style="padding:10px 12px;">${esc(u.rol)}</td>
+            <td style="padding:10px 12px;">${u.activo ? '✅ Activo' : '⛔ Inactivo'}</td>
+            <td style="padding:10px 12px; display:flex; gap:6px; flex-wrap:wrap;">
+              ${u.id !== currentUser?.id ? `<button class="btn-secondary" style="font-size:12px; padding:4px 8px;" onclick="toggleUsuarioActivoAdmin(${u.id}, ${u.activo ? 0 : 1})">${u.activo ? 'Desactivar' : 'Activar'}</button>` : '(yo)'}
+            </td>
+          </tr>`).join('')
+          }
+        </tbody>
+      </table></div>`;
+  } catch(e) {
+    list.innerHTML = '<p style="color:var(--danger)">Error cargando usuarios</p>';
+  }
+}
+
+async function crearUsuarioAdmin() {
+  const nombre   = document.getElementById('admin-user-nombre').value.trim();
+  const username = document.getElementById('admin-user-username').value.trim();
+  const password = document.getElementById('admin-user-password').value;
+  const rol      = document.getElementById('admin-user-rol').value;
+  if (!nombre || !username || !password) { showToast('⚠ Completa todos los campos'); return; }
+  const res = await apiFetch('/api/usuarios', {
+    method: 'POST',
+    body: JSON.stringify({nombre, username, password, rol})
+  });
+  if (!res) return;
+  if (!res.ok) { const d = await res.json(); showToast('⚠ ' + d.error); return; }
+  // Reset form
+  document.getElementById('admin-user-nombre').value = '';
+  document.getElementById('admin-user-username').value = '';
+  document.getElementById('admin-user-password').value = '';
+  document.getElementById('admin-user-rol').selectedIndex = 0;
+  closeModal('modal-nuevo-usuario-admin');
+  showToast('✅ Usuario creado');
+  await renderPanelUsuarios();
+}
+
+async function toggleUsuarioActivoAdmin(userId, nuevoActivo) {
+  const res = await apiFetch(`/api/usuarios/${userId}`, {
+    method: 'PUT',
+    body: JSON.stringify({activo: nuevoActivo})
+  });
+  if (!res) return;
+  if (!res.ok) { showToast('⚠ Error al actualizar usuario'); return; }
+  await renderPanelUsuarios();
+}
+
+function iniciarCheckExpiracion() {
+  if (_expiryCheckInterval) clearInterval(_expiryCheckInterval);
+  _expiryCheckInterval = setInterval(() => {
+    const exp = parseInt(localStorage.getItem('sfpos_exp') || '0');
+    const ahora = Math.floor(Date.now() / 1000);
+    const banner = document.getElementById('session-expiry-banner');
+    if (exp > 0 && exp - ahora < 3600 && exp > ahora) {
+      if (banner) banner.style.display = 'block';
+    } else {
+      if (banner) banner.style.display = 'none';
+    }
+  }, 60000);
+}
+
+// Secuencia de arranque
 (async () => {
-  await loadData();
-  renderCatPills();
-  renderProducts();
-  renderCart();
-  renderInventario();
-  renderReportes();
-  updateLowStockBadge();
+  // Fecha en modal apertura
+  document.getElementById('apertura-fecha').textContent =
+    new Date().toLocaleDateString('es-CO', {weekday:'long', year:'numeric', month:'long', day:'numeric'});
+
+  const token = localStorage.getItem('sfpos_token');
+  const exp   = parseInt(localStorage.getItem('sfpos_exp') || '0');
+  const ahora = Math.floor(Date.now() / 1000);
+
+  if (!token || exp < ahora) {
+    ['sfpos_token','sfpos_exp','sfpos_user','sfpos_tienda'].forEach(k => localStorage.removeItem(k));
+    showLoginScreen();
+    return;
+  }
+
+  // Validar token con el servidor.
+  // NOTA: usamos fetch() directamente (no apiFetch) porque apiFetch llama showLoginScreen()
+  // en 401, lo que crearía un ciclo si la sesión ya expiró. Este es el único lugar donde
+  // se maneja el 401 manualmente en el boot.
+  try {
+    const res = await fetch('/api/auth/me', {
+      headers: { 'Authorization': `Bearer ${token}` }
+    });
+    if (!res.ok) {
+      ['sfpos_token','sfpos_exp','sfpos_user','sfpos_tienda'].forEach(k => localStorage.removeItem(k));
+      showLoginScreen('Sesión expirada. Ingresa de nuevo.');
+      return;
+    }
+    const data = await res.json();
+    await iniciarApp(data.user, data.tienda);
+  } catch(e) {
+    showLoginScreen('Error de conexión. Intenta de nuevo.');
+  }
 })();
 
 // ─── PWA: Service Worker ───────────────────────────────────────────
