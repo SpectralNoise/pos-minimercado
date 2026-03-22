@@ -1294,6 +1294,13 @@ table.inv-table {
     </div>
   </div>
 
+  <div class="screen" id="screen-usuarios" style="flex-direction:column; overflow-y:auto; padding:24px;">
+    <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:20px;">
+      <span class="page-title">Usuarios</span>
+    </div>
+    <div id="usuarios-list">Cargando...</div>
+  </div>
+
 </div><!-- #app -->
 
 <!-- MODAL: PAGO -->
@@ -1594,11 +1601,8 @@ function doLogout() {
   if (cajaSession) { showToast('⚠ Cierra la caja antes de cerrar sesión'); return; }
   if (!confirm('¿Cerrar sesión?')) return;
   if (_expiryCheckInterval) { clearInterval(_expiryCheckInterval); _expiryCheckInterval = null; }
-  const banner = document.getElementById('session-expiry-banner');
-  if (banner) banner.style.display = 'none';
   ['sfpos_token','sfpos_exp','sfpos_user','sfpos_tienda'].forEach(k => localStorage.removeItem(k));
-  currentUser = null;
-  showLoginScreen();
+  location.reload();
 }
 
 // ─── DATOS (cargados desde API) ─────────────────
@@ -2869,7 +2873,7 @@ let cajaSession = null; // { cajero, inicio, montoInicial, ventasIds[] }
 function openModal(id) { document.getElementById(id).classList.add('open'); }
 
 async function abrirCaja() {
-  const cajero = document.getElementById('apertura-cajero').value.trim();
+  const cajero = currentUser?.nombre || document.getElementById('apertura-cajero').value.trim();
   const monto  = parseMoney('apertura-monto');
   if (!cajero) { showToast('⚠ Ingresa el nombre del cajero'); return; }
 
@@ -3131,6 +3135,10 @@ async function iniciarApp(user, tienda) {
 
 let _expiryCheckInterval = null;
 
+// Stubs temporales — implementados en Tasks 11 y 12
+async function renderSuperadmin() {}
+function renderPanelUsuarios() {}
+
 function iniciarCheckExpiracion() {
   if (_expiryCheckInterval) clearInterval(_expiryCheckInterval);
   _expiryCheckInterval = setInterval(() => {
@@ -3139,6 +3147,8 @@ function iniciarCheckExpiracion() {
     const banner = document.getElementById('session-expiry-banner');
     if (exp > 0 && exp - ahora < 3600 && exp > ahora) {
       if (banner) banner.style.display = 'block';
+    } else {
+      if (banner) banner.style.display = 'none';
     }
   }, 60000);
 }
