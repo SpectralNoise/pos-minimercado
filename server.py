@@ -5,8 +5,10 @@ Puerto 5051 · Sirve index.html, REST API SQLite, y endpoints de IA
 """
 
 import os, json, mimetypes, ssl, sqlite3, base64, io, urllib.request, urllib.error, socketserver
+import hmac as _hmac, hashlib, time, secrets
 from http.server import HTTPServer, BaseHTTPRequestHandler
 from pathlib import Path
+from collections import namedtuple
 
 # Cargar .env si existe
 _env_file = Path(__file__).parent / ".env"
@@ -29,6 +31,17 @@ from PIL import Image
 ANTHROPIC_API_KEY = os.environ.get("ANTHROPIC_API_KEY", "")
 TURSO_URL         = os.environ.get("TURSO_URL", "")
 TURSO_TOKEN       = os.environ.get("TURSO_TOKEN", "")
+
+SECRET_KEY = os.environ.get("SECRET_KEY", "")
+if not SECRET_KEY:
+    raise RuntimeError(
+        "[SFPOS] SECRET_KEY no configurada.\n"
+        "  En Railway: Variables → agregar SECRET_KEY con un valor aleatorio largo.\n"
+        "  En local: agregar SECRET_KEY=<valor> en el archivo .env"
+    )
+
+AuthContext = namedtuple("AuthContext", ["user_id", "tienda_id", "rol"])
+
 BASE_DIR = Path(__file__).parent
 DB_PATH  = BASE_DIR / "pos.db"  # solo se usa en local
 
@@ -226,6 +239,46 @@ class Handler(BaseHTTPRequestHandler):
     def send_error_json(self, msg, status=400):
         self.send_json({"error": msg}, status)
 
+    def require_auth(self):
+        """Valida el token Bearer. Retorna AuthContext o envía 401 y retorna None."""
+        header = self.headers.get("Authorization", "")
+        if not header.startswith("Bearer "):
+            self.send_error_json("No autenticado", 401); return None
+        token = header[7:]
+        try:
+            payload_b64, signature = token.rsplit(".", 1)
+            payload = base64.b64decode(payload_b64).decode()
+            expected = _hmac.new(SECRET_KEY.encode(), payload.encode(), hashlib.sha256).hexdigest()
+            if not _hmac.compare_digest(expected, signature):
+                self.send_error_json("Token inválido", 401); return None
+            user_id_s, tienda_str, rol, exp_s = payload.split(":")
+            if int(exp_s) < int(time.time()):
+                self.send_error_json("Sesión expirada", 401); return None
+            tienda_id = None if tienda_str == "null" else int(tienda_str)
+            conn = get_db()
+            try:
+                u = conn.execute("SELECT activo FROM usuarios WHERE id=?", (int(user_id_s),)).fetchone()
+                if not u or not u["activo"]:
+                    self.send_error_json("Usuario inactivo", 401); return None
+                if tienda_id is not None:
+                    t = conn.execute("SELECT activo FROM tiendas WHERE id=?", (tienda_id,)).fetchone()
+                    if not t or not t["activo"]:
+                        self.send_error_json("Tienda inactiva", 401); return None
+            finally:
+                conn.close()
+            return AuthContext(int(user_id_s), tienda_id, rol)
+        except Exception:
+            self.send_error_json("Token inválido", 401); return None
+
+    def _make_token(self, user_id, tienda_id, rol):
+        """Genera token HMAC-SHA256 con 12h de expiración."""
+        exp = int(time.time()) + 43200
+        tienda_str = "null" if tienda_id is None else str(tienda_id)
+        payload = f"{user_id}:{tienda_str}:{rol}:{exp}"
+        payload_b64 = base64.b64encode(payload.encode()).decode()
+        sig = _hmac.new(SECRET_KEY.encode(), payload.encode(), hashlib.sha256).hexdigest()
+        return f"{payload_b64}.{sig}", exp
+
     def read_json_body(self):
         length = int(self.headers.get("Content-Length", 0))
         data = b""
@@ -240,7 +293,7 @@ class Handler(BaseHTTPRequestHandler):
         self.send_response(200)
         self.send_header("Access-Control-Allow-Origin", "*")
         self.send_header("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS")
-        self.send_header("Access-Control-Allow-Headers", "Content-Type")
+        self.send_header("Access-Control-Allow-Headers", "Content-Type, Authorization")
         self.end_headers()
 
     # ── GET ────────────────────────────────────────────────────────
