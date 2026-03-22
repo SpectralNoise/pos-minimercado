@@ -1481,6 +1481,23 @@ table.inv-table {
 <div class="toast" id="toast"></div>
 
 <script>
+// ─── AUTH ──────────────────────────────────────
+let currentUser = null;
+// { id, nombre, username, rol, tienda_id } — tienda_id === null para superadmin
+
+async function apiFetch(url, options = {}) {
+  const token = localStorage.getItem('sfpos_token');
+  const headers = { 'Content-Type': 'application/json', ...(options.headers || {}) };
+  if (token) headers['Authorization'] = `Bearer ${token}`;
+  const res = await fetch(url, { ...options, headers });
+  if (res.status === 401) {
+    ['sfpos_token','sfpos_exp','sfpos_user','sfpos_tienda'].forEach(k => localStorage.removeItem(k));
+    showLoginScreen('Sesión expirada. Ingresa de nuevo.');
+    return null;
+  }
+  return res;
+}
+
 // ─── DATOS (cargados desde API) ─────────────────
 let products = [];
 let _placeHolder = [
@@ -1529,14 +1546,14 @@ function normalizarVenta(v) {
 async function loadData() {
   try {
     const [pRes, vRes, tRes] = await Promise.all([
-      fetch('/api/productos'),
-      fetch('/api/ventas'),
-      fetch('/api/turnos/activo')
+      apiFetch('/api/productos'),
+      apiFetch('/api/ventas'),
+      apiFetch('/api/turnos/activo')
     ]);
+    if (!pRes || !vRes || !tRes) return; // sesión expirada
     products = await pRes.json();
     sales    = (await vRes.json()).map(normalizarVenta);
     const turnoActivo = await tRes.json();
-
     if (turnoActivo && turnoActivo.id) {
       cajaSession = {
         id:           turnoActivo.id,
@@ -1822,7 +1839,8 @@ function closeCameraScanner() {
 async function lookupAndOffer(barcode) {
   showToast(`🔍 Buscando código ${barcode}...`);
   try {
-    const res  = await fetch(`/api/lookup-barcode/${encodeURIComponent(barcode)}`);
+    const res  = await apiFetch(`/api/lookup-barcode/${encodeURIComponent(barcode)}`);
+    if (!res) return;
     const data = await res.json();
     if (!data.found) {
       showToast(`⚠ Código no encontrado: ${barcode}`);
@@ -1862,7 +1880,8 @@ async function lookupFillModal(barcode) {
   const status = document.getElementById('analyze-status');
   if (status) status.textContent = '🔍 Buscando en base de datos...';
   try {
-    const res  = await fetch(`/api/lookup-barcode/${encodeURIComponent(barcode)}`);
+    const res  = await apiFetch(`/api/lookup-barcode/${encodeURIComponent(barcode)}`);
+    if (!res) return;
     const data = await res.json();
     if (!data.found) {
       if (status) status.textContent = '';
@@ -2042,7 +2061,7 @@ async function completarVenta() {
     : total;
 
   try {
-    const res = await fetch('/api/ventas', {
+    const res = await apiFetch('/api/ventas', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
@@ -2053,11 +2072,13 @@ async function completarVenta() {
         items: cart.map(i => ({ id: i.id, name: i.name, emoji: i.emoji, qty: i.qty, price: i.price }))
       })
     });
+    if (!res) return;
     const data = await res.json();
     if (!res.ok) throw new Error(data.error);
 
     // Recargar productos para reflejar stock actualizado
-    const pRes = await fetch('/api/productos');
+    const pRes = await apiFetch('/api/productos');
+    if (!pRes) return;
     products = await pRes.json();
 
     lastSale = {
@@ -2239,13 +2260,12 @@ async function recargarInventario() {
   const btn = document.getElementById('btn-refresh-inv');
   if (btn) btn.disabled = true;
   try {
-    const res = await fetch('/api/productos');
+    const res = await apiFetch('/api/productos');
+    if (!res) return;
     if (!res.ok) { showToast('⚠ Error al actualizar'); return; }
     products = await res.json();
     renderInventario();
     showToast('✅ Inventario actualizado');
-  } catch (e) {
-    showToast('⚠ Error de red');
   } finally {
     if (btn) btn.disabled = false;
   }
@@ -2535,11 +2555,12 @@ async function saveProduct() {
   };
   if (!data.name) { showToast('⚠ Ingresa un nombre'); return; }
   try {
-    const res = await fetch(id ? `/api/productos/${id}` : '/api/productos', {
+    const res = await apiFetch(id ? `/api/productos/${id}` : '/api/productos', {
       method: id ? 'PUT' : 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(data)
     });
+    if (!res) return;
     const saved = await res.json();
     if (!res.ok) throw new Error(saved.error);
     if (id) {
@@ -2562,7 +2583,8 @@ async function saveProduct() {
 async function deleteProduct(id) {
   if (!confirm('¿Eliminar este producto?')) return;
   try {
-    await fetch(`/api/productos/${id}`, { method: 'DELETE' });
+    const delRes = await apiFetch(`/api/productos/${id}`, { method: 'DELETE' });
+    if (!delRes) return;
     products = products.filter(p => p.id !== id);
     renderInventario();
     renderCatPills();
@@ -2662,7 +2684,8 @@ async function renderTurnos() {
   if (currentMode !== 'admin') { section.style.display = 'none'; return; }
 
   try {
-    const res = await fetch('/api/turnos');
+    const res = await apiFetch('/api/turnos');
+    if (!res) return;
     const turnos = await res.json();
     section.style.display = '';
 
@@ -2745,11 +2768,12 @@ async function abrirCaja() {
   if (!cajero) { showToast('⚠ Ingresa el nombre del cajero'); return; }
 
   try {
-    const res = await fetch('/api/turnos', {
+    const res = await apiFetch('/api/turnos', {
       method: 'POST',
       headers: {'Content-Type':'application/json'},
       body: JSON.stringify({ cajero, monto_inicial: monto })
     });
+    if (!res) return;
     const data = await res.json();
 
     if (res.status === 409) {
@@ -2760,11 +2784,12 @@ async function abrirCaja() {
         `Hay un turno de "${t.cajero}" sin cerrar desde ${fecha}.\n¿Cerrarlo automáticamente y abrir uno nuevo?`
       );
       if (!confirmar) return;
-      const cierreRes = await fetch(`/api/turnos/${t.id}/cierre`, {
+      const cierreRes = await apiFetch(`/api/turnos/${t.id}/cierre`, {
         method: 'PUT',
         headers: {'Content-Type':'application/json'},
         body: JSON.stringify({efectivo_ventas:0,transferencias:0,total_ventas:0,num_tx:0,monto_contado:null,diferencia:null,resumen_ia:null})
       });
+      if (!cierreRes) return;
       if (!cierreRes.ok) { showToast('⚠ No se pudo cerrar el turno anterior'); return; }
       return abrirCaja();
     }
@@ -2892,7 +2917,7 @@ async function cerrarCaja() {
     ? iaTexto.textContent : null;
 
   try {
-    await fetch(`/api/turnos/${cajaSession.id}/cierre`, {
+    const cierreRes = await apiFetch(`/api/turnos/${cajaSession.id}/cierre`, {
       method: 'PUT',
       headers: {'Content-Type':'application/json'},
       body: JSON.stringify({
@@ -2905,6 +2930,7 @@ async function cerrarCaja() {
         resumen_ia
       })
     });
+    if (!cierreRes) return;
   } catch (e) {
     console.warn('No se pudo guardar el cierre en DB:', e);
   }
