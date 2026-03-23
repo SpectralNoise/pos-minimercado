@@ -1050,7 +1050,7 @@ table.inv-table {
     <div style="text-align:center; margin-bottom:32px;">
       <div style="font-size:48px; margin-bottom:8px;">🛒</div>
       <div id="login-tienda-nombre" style="display:none; font-family:var(--ff-disp); font-size:22px; font-weight:800; color:var(--text); margin-bottom:2px;"></div>
-      <div style="font-family:var(--ff-disp); font-size:14px; font-weight:600; letter-spacing:.06em; color:var(--text-2); text-transform:uppercase;">SFPOS</div>
+      <div style="font-family:var(--ff-disp); font-size:14px; font-weight:600; letter-spacing:.06em; color:var(--text-2); text-transform:uppercase;">AESSPOS</div>
       <div style="font-size:13px; color:var(--text-2); margin-top:4px;">Sistema de Punto de Venta</div>
     </div>
     <div style="background:var(--surface); border:1px solid var(--border); border-radius:16px; padding:28px 24px;">
@@ -1065,7 +1065,7 @@ table.inv-table {
       <div id="login-error" style="display:none; color:var(--danger); font-size:13px; margin-bottom:12px; padding:8px 12px; background:var(--danger-bg,#fee2e2); border-radius:8px;"></div>
       <button id="login-btn" class="btn-cobrar" onclick="doLogin()" style="width:100%;">Ingresar</button>
     </div>
-    <div style="text-align:center; margin-top:16px; font-size:12px; color:var(--text-3);">SFPOS v1.0 · sfpos.app</div>
+    <div style="text-align:center; margin-top:16px; font-size:12px; color:var(--text-3);">AESSPOS v1.0 · aesspos.app</div>
   </div>
 </div>
 
@@ -1289,7 +1289,7 @@ table.inv-table {
   <div class="screen" id="screen-superadmin" style="display:none; flex-direction:column; overflow-y:auto;">
     <div style="padding:32px 24px;">
       <h2 style="font-family:var(--ff-disp); font-size:20px; font-weight:700; margin-bottom:8px;">Panel Superadmin</h2>
-      <p style="color:var(--text-2); font-size:14px; margin-bottom:24px;">Gestión de tiendas y usuarios de la plataforma SFPOS.</p>
+      <p style="color:var(--text-2); font-size:14px; margin-bottom:24px;">Gestión de tiendas y usuarios de la plataforma AESSPOS.</p>
       <div id="superadmin-content">Cargando...</div>
     </div>
   </div>
@@ -1631,12 +1631,12 @@ let currentUser = null;
 // { id, nombre, username, rol, tienda_id } — tienda_id === null para superadmin
 
 async function apiFetch(url, options = {}) {
-  const token = localStorage.getItem('sfpos_token');
+  const token = localStorage.getItem('aesspos_token');
   const headers = { 'Content-Type': 'application/json', ...(options.headers || {}) };
   if (token) headers['Authorization'] = `Bearer ${token}`;
   const res = await fetch(url, { ...options, headers });
   if (res.status === 401) {
-    ['sfpos_token','sfpos_exp','sfpos_user','sfpos_tienda'].forEach(k => localStorage.removeItem(k));
+    ['aesspos_token','aesspos_exp','aesspos_user','aesspos_tienda'].forEach(k => localStorage.removeItem(k));
     showLoginScreen('Sesión expirada. Ingresa de nuevo.');
     return null;
   }
@@ -1677,10 +1677,10 @@ async function doLogin() {
       errEl.textContent = data.error || 'Credenciales incorrectas';
       errEl.style.display = 'block'; return;
     }
-    localStorage.setItem('sfpos_token',  data.token);
-    localStorage.setItem('sfpos_exp',    String(data.exp));
-    localStorage.setItem('sfpos_user',   JSON.stringify(data.user));
-    localStorage.setItem('sfpos_tienda', JSON.stringify(data.tienda));
+    localStorage.setItem('aesspos_token',  data.token);
+    localStorage.setItem('aesspos_exp',    String(data.exp));
+    localStorage.setItem('aesspos_user',   JSON.stringify(data.user));
+    localStorage.setItem('aesspos_tienda', JSON.stringify(data.tienda));
     await iniciarApp(data.user, data.tienda);
   } catch(e) {
     errEl.textContent = 'Error de conexión'; errEl.style.display = 'block';
@@ -1701,7 +1701,7 @@ function doLogout() {
   if (cajaSession) { showToast('⚠ Cierra la caja antes de cerrar sesión'); return; }
   if (!confirm('¿Cerrar sesión?')) return;
   if (_expiryCheckInterval) { clearInterval(_expiryCheckInterval); _expiryCheckInterval = null; }
-  ['sfpos_token','sfpos_exp','sfpos_user','sfpos_tienda'].forEach(k => localStorage.removeItem(k));
+  ['aesspos_token','aesspos_exp','aesspos_user','aesspos_tienda'].forEach(k => localStorage.removeItem(k));
   location.reload();
 }
 
@@ -3545,7 +3545,7 @@ async function toggleUsuarioActivoAdmin(userId, nuevoActivo) {
 function iniciarCheckExpiracion() {
   if (_expiryCheckInterval) clearInterval(_expiryCheckInterval);
   _expiryCheckInterval = setInterval(() => {
-    const exp = parseInt(localStorage.getItem('sfpos_exp') || '0');
+    const exp = parseInt(localStorage.getItem('aesspos_exp') || '0');
     const ahora = Math.floor(Date.now() / 1000);
     const banner = document.getElementById('session-expiry-banner');
     if (exp > 0 && exp - ahora < 3600 && exp > ahora) {
@@ -3576,12 +3576,12 @@ function iniciarCheckExpiracion() {
     } catch(e) { /* continuar igual */ }
   }
 
-  const token = localStorage.getItem('sfpos_token');
-  const exp   = parseInt(localStorage.getItem('sfpos_exp') || '0');
+  const token = localStorage.getItem('aesspos_token');
+  const exp   = parseInt(localStorage.getItem('aesspos_exp') || '0');
   const ahora = Math.floor(Date.now() / 1000);
 
   if (!token || exp < ahora) {
-    ['sfpos_token','sfpos_exp','sfpos_user','sfpos_tienda'].forEach(k => localStorage.removeItem(k));
+    ['aesspos_token','aesspos_exp','aesspos_user','aesspos_tienda'].forEach(k => localStorage.removeItem(k));
     showLoginScreen();
     return;
   }
@@ -3595,7 +3595,7 @@ function iniciarCheckExpiracion() {
       headers: { 'Authorization': `Bearer ${token}` }
     });
     if (!res.ok) {
-      ['sfpos_token','sfpos_exp','sfpos_user','sfpos_tienda'].forEach(k => localStorage.removeItem(k));
+      ['aesspos_token','aesspos_exp','aesspos_user','aesspos_tienda'].forEach(k => localStorage.removeItem(k));
       showLoginScreen('Sesión expirada. Ingresa de nuevo.');
       return;
     }

@@ -39,7 +39,7 @@ TURSO_TOKEN       = os.environ.get("TURSO_TOKEN", "")
 SECRET_KEY = os.environ.get("SECRET_KEY", "")
 if not SECRET_KEY:
     raise RuntimeError(
-        "[SFPOS] SECRET_KEY no configurada.\n"
+        "[AESSPOS] SECRET_KEY no configurada.\n"
         "  En Railway: Variables → agregar SECRET_KEY con un valor aleatorio largo.\n"
         "  En local: agregar SECRET_KEY=<valor> en el archivo .env"
     )
@@ -257,10 +257,10 @@ def init_db():
             (None, "Super Admin", "admin", _hash, _salt, "superadmin")
         )
         conn.commit()
-        print(f"\n  [SFPOS] ✅ Superadmin creado")
-        print(f"  [SFPOS]    Usuario:    admin")
-        print(f"  [SFPOS]    Contraseña: {_pw}")
-        print(f"  [SFPOS]    ⚠  Guarda esta contraseña — no se volverá a mostrar.\n")
+        print(f"\n  [AESSPOS] ✅ Superadmin creado")
+        print(f"  [AESSPOS]    Usuario:    admin")
+        print(f"  [AESSPOS]    Contraseña: {_pw}")
+        print(f"  [AESSPOS]    ⚠  Guarda esta contraseña — no se volverá a mostrar.\n")
     if conn.execute("SELECT COUNT(*) FROM productos").fetchone()[0] == 0:
         conn.executemany(
             "INSERT INTO productos (emoji,name,barcode,cat,price,stock,alert) VALUES (?,?,?,?,?,?,?)",
