@@ -3185,9 +3185,10 @@ document.getElementById('search-input').addEventListener('input', e => {
 });
 
 // Mantener foco en search-input cuando se hace clic fuera de un input
-// (asegura que el lector siempre tenga donde depositar los caracteres)
+// (asegura que el lector de barras físico siempre tenga donde depositar los caracteres)
+// Solo en desktop — en mobile esto abriría el teclado al tocar productos
 document.getElementById('screen-cobro').addEventListener('click', function(e) {
-  if (!e.target.closest('input, button, .modal-overlay')) {
+  if (window.innerWidth > 640 && !e.target.closest('input, button, .modal-overlay')) {
     document.getElementById('search-input').focus();
   }
 });
