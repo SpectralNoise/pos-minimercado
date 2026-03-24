@@ -963,6 +963,8 @@ class Handler(BaseHTTPRequestHandler):
                 self._create_tienda_usuario(int(parts[3]))
             else:
                 self.send_error_json("Ruta no encontrada", 404)
+        elif self.path == "/api/admin/compress-thumbnails":
+            self._compress_all_thumbnails()
         else:
             self.send_error_json("Ruta no encontrada", 404)
 
@@ -997,6 +999,39 @@ class Handler(BaseHTTPRequestHandler):
             self.send_error_json("Ruta no encontrada", 404)
 
     # ── CRUD PRODUCTOS ─────────────────────────────────────────────
+    def _compress_all_thumbnails(self):
+        """Endpoint de mantenimiento: recomprime todas las imágenes existentes a 80×80@70."""
+        ctx = self.require_auth()
+        if not ctx: return
+        if ctx.rol != 'superadmin':
+            self.send_error_json("Solo superadmin", 403); return
+        if not PIL_AVAILABLE:
+            self.send_error_json("Pillow no disponible en este servidor", 500); return
+        try:
+            conn = get_db()
+            try:
+                rows = conn.execute(
+                    "SELECT id, thumbnail FROM productos WHERE thumbnail IS NOT NULL AND thumbnail != ''"
+                ).fetchall()
+                updated = 0
+                skipped = 0
+                for row in rows:
+                    compressed = self._compress_thumbnail(row["thumbnail"])
+                    # Solo actualizar si la compresión redujo el tamaño
+                    if compressed and len(compressed) < len(row["thumbnail"]):
+                        conn.execute("UPDATE productos SET thumbnail=? WHERE id=?",
+                                     (compressed, row["id"]))
+                        updated += 1
+                    else:
+                        skipped += 1
+                conn.commit()
+                self.send_json({"ok": True, "updated": updated, "skipped": skipped,
+                                "total": len(rows)})
+            finally:
+                conn.close()
+        except Exception as e:
+            self.send_error_json(str(e), 500)
+
     def _compress_thumbnail(self, data_url):
         """Comprime cualquier imagen a 80×80 JPEG @70 antes de guardarla."""
         if not data_url or not PIL_AVAILABLE:
