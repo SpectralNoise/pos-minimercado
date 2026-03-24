@@ -3916,7 +3916,7 @@ function showRecibo() {
     <hr class="receipt-divider">
     <div class="receipt-total-row"><span>TOTAL</span><span class="rt-val">${fmt(s.total)}</span></div>
     ${recibidoLine}
-    <div class="receipt-footer">¡Gracias por su compra!<br>Vuelva pronto 🙂</div>
+    <div class="receipt-footer">¡Gracias por su compra!<br>Vuelva pronto.</div>
   `;
   document.getElementById('modal-recibo').classList.add('open');
 }
@@ -3994,7 +3994,7 @@ async function sendWhatsApp() {
 
   // ── Pie ─────────────────────────────────────
   center('¡Gracias por su compra!', '12px monospace', '#333'); y += LHsm + 2;
-  center('Vuelva pronto 🙂', '12px monospace', '#888');
+  center('Vuelva pronto.', '12px monospace', '#888');
 
   // Intentar Web Share API (funciona en móvil como imagen)
   canvas.toBlob(async blob => {
