@@ -1301,11 +1301,12 @@ table.inv-table {
     padding-bottom: env(safe-area-inset-bottom, 0px);
   }
   #cart-panel.cart-open { transform: translateY(0); }
-  /* Footer sticky: siempre visible al fondo aunque haya muchos ítems */
+  /* Footer sticky: siempre visible por encima del bottom nav (64px) */
   #cart-panel .cart-footer {
-    position: sticky; bottom: 0;
+    position: sticky; bottom: 64px;
     background: var(--surf-1);
-    box-shadow: 0 -2px 8px var(--accent-shadow);
+    border-top: 1px solid var(--border);
+    box-shadow: 0 -4px 16px var(--accent-shadow);
     z-index: 2;
   }
   /* Drag handle + close btn visible on mobile */
