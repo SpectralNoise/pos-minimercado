@@ -1297,22 +1297,16 @@ table.inv-table {
     z-index: 196;
     transform: translateY(100%);
     transition: transform 300ms cubic-bezier(.32,1,.64,1);
-    /* Flex column: footer siempre visible, solo items hace scroll */
-    display: flex !important; flex-direction: column;
-    overflow: hidden;
+    overflow-y: auto;
     padding-bottom: env(safe-area-inset-bottom, 0px);
   }
-  #cart-panel.cart-open {
-    transform: translateY(0);
-  }
-  /* Items: scroll interno, footer fijo */
-  #cart-panel .cart-items {
-    flex: 1; overflow-y: auto; max-height: none;
-    -webkit-overflow-scrolling: touch;
-  }
-  /* Footer siempre anclado abajo */
+  #cart-panel.cart-open { transform: translateY(0); }
+  /* Footer sticky: siempre visible al fondo aunque haya muchos ítems */
   #cart-panel .cart-footer {
-    flex-shrink: 0;
+    position: sticky; bottom: 0;
+    background: var(--surf-1);
+    box-shadow: 0 -2px 8px var(--accent-shadow);
+    z-index: 2;
   }
   /* Drag handle + close btn visible on mobile */
   .cart-drag-handle {
