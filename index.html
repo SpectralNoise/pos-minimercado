@@ -1053,7 +1053,9 @@ table.inv-table {
       <div style="font-family:var(--ff-disp); font-size:14px; font-weight:600; letter-spacing:.06em; color:var(--text-2); text-transform:uppercase;">AESSPOS</div>
       <div style="font-size:13px; color:var(--text-2); margin-top:4px;">Sistema de Punto de Venta</div>
     </div>
-    <div style="background:var(--surface); border:1px solid var(--border); border-radius:16px; padding:28px 24px;">
+
+    <!-- Formulario usuario/contraseña -->
+    <div id="login-form-panel" style="background:var(--surface); border:1px solid var(--border); border-radius:16px; padding:28px 24px;">
       <div style="margin-bottom:16px;">
         <label style="display:block; font-size:12px; font-weight:600; text-transform:uppercase; letter-spacing:.07em; color:var(--text-2); margin-bottom:6px;">Usuario</label>
         <input type="text" id="login-username" class="form-input" placeholder="Ej: admin" autocomplete="username" autocapitalize="none" style="width:100%; box-sizing:border-box;">
@@ -1064,8 +1066,44 @@ table.inv-table {
       </div>
       <div id="login-error" style="display:none; color:var(--danger); font-size:13px; margin-bottom:12px; padding:8px 12px; background:var(--danger-bg,#fee2e2); border-radius:8px;"></div>
       <button id="login-btn" class="btn-cobrar" onclick="doLogin()" style="width:100%;">Ingresar</button>
+      <!-- Botón Google — solo en path raíz (superadmin) -->
+      <div id="login-google-wrap" style="display:none; margin-top:16px;">
+        <div style="display:flex; align-items:center; gap:8px; margin-bottom:12px;">
+          <div style="flex:1; height:1px; background:var(--border);"></div>
+          <span style="font-size:12px; color:var(--text-3);">o</span>
+          <div style="flex:1; height:1px; background:var(--border);"></div>
+        </div>
+        <a href="/api/auth/google" style="display:flex; align-items:center; justify-content:center; gap:10px; width:100%; padding:10px; border:1px solid var(--border); border-radius:10px; background:var(--surface); color:var(--text); font-size:14px; font-weight:600; text-decoration:none; box-sizing:border-box;">
+          <svg width="18" height="18" viewBox="0 0 48 48"><path fill="#4285F4" d="M44.5 20H24v8.5h11.8C34.7 33.9 30.1 37 24 37c-7.2 0-13-5.8-13-13s5.8-13 13-13c3.1 0 5.9 1.1 8.1 2.9l6.4-6.4C34.6 4.1 29.6 2 24 2 11.8 2 2 11.8 2 24s9.8 22 22 22c11 0 21-8 21-22 0-1.3-.2-2.7-.5-4z"/></svg>
+          Continuar con Google
+        </a>
+      </div>
     </div>
-    <div style="text-align:center; margin-top:16px; font-size:12px; color:var(--text-3);">AESSPOS v1.0 · aesspos.app</div>
+
+    <!-- Panel 2FA -->
+    <div id="login-2fa-panel" style="display:none; background:var(--surface); border:1px solid var(--border); border-radius:16px; padding:28px 24px;">
+      <div style="text-align:center; margin-bottom:20px;">
+        <div style="font-size:32px; margin-bottom:8px;">🔐</div>
+        <div style="font-weight:700; font-size:16px;">Verificación en dos pasos</div>
+        <div id="login-2fa-hint" style="font-size:13px; color:var(--text-2); margin-top:4px;">Ingresa el código de tu app autenticadora</div>
+      </div>
+      <div id="login-2fa-code-wrap" style="margin-bottom:16px;">
+        <label style="display:block; font-size:12px; font-weight:600; text-transform:uppercase; letter-spacing:.07em; color:var(--text-2); margin-bottom:6px;">Código de 6 dígitos</label>
+        <input type="text" id="login-2fa-code" class="form-input" placeholder="000000" maxlength="6" inputmode="numeric" pattern="[0-9]*" style="width:100%; box-sizing:border-box; font-size:24px; letter-spacing:.2em; text-align:center;">
+      </div>
+      <div id="login-2fa-recovery-wrap" style="display:none; margin-bottom:16px;">
+        <label style="display:block; font-size:12px; font-weight:600; text-transform:uppercase; letter-spacing:.07em; color:var(--text-2); margin-bottom:6px;">Código de recuperación</label>
+        <input type="text" id="login-2fa-recovery" class="form-input" placeholder="XXXXXX-XXXXXX-XXXXXX" autocapitalize="characters" style="width:100%; box-sizing:border-box;">
+      </div>
+      <div id="login-2fa-error" style="display:none; color:var(--danger); font-size:13px; margin-bottom:12px; padding:8px 12px; background:var(--danger-bg,#fee2e2); border-radius:8px;"></div>
+      <button id="login-2fa-btn" class="btn-cobrar" onclick="do2FAVerify()" style="width:100%; margin-bottom:12px;">Verificar</button>
+      <button onclick="toggle2FARecovery()" style="width:100%; background:none; border:none; color:var(--text-2); font-size:13px; cursor:pointer; padding:4px;">
+        <span id="login-2fa-toggle-text">¿Perdiste tu teléfono? Usar código de recuperación</span>
+      </button>
+      <button onclick="show2FABack()" style="display:block; margin-top:8px; width:100%; background:none; border:none; color:var(--text-3); font-size:12px; cursor:pointer; padding:4px;">← Volver al login</button>
+    </div>
+
+    <div style="text-align:center; margin-top:16px; font-size:12px; color:var(--text-3);">AESSPOS v1.0 · aesspos.com</div>
   </div>
 </div>
 
@@ -1291,6 +1329,9 @@ table.inv-table {
       <h2 style="font-family:var(--ff-disp); font-size:20px; font-weight:700; margin-bottom:8px;">Panel Superadmin</h2>
       <p style="color:var(--text-2); font-size:14px; margin-bottom:24px;">Gestión de tiendas y usuarios de la plataforma AESSPOS.</p>
       <div id="superadmin-content">Cargando...</div>
+      <hr style="border:none; border-top:1px solid var(--border); margin:8px 0 24px;">
+      <h3 style="font-size:15px; font-weight:700; margin-bottom:16px;">🔐 Seguridad de mi cuenta</h3>
+      <div id="security-panel">Cargando...</div>
     </div>
   </div>
 
@@ -1644,13 +1685,88 @@ async function apiFetch(url, options = {}) {
 }
 
 // ─── LOGIN / LOGOUT ─────────────────────────────
+let _partial_token = null; // token temporal para el paso de 2FA
+
 function showLoginScreen(msg = '') {
   document.getElementById('app').style.display = 'none';
   document.getElementById('login-screen').style.display = 'flex';
+  document.getElementById('login-form-panel').style.display = 'block';
+  document.getElementById('login-2fa-panel').style.display = 'none';
   const errEl = document.getElementById('login-error');
   if (msg) { errEl.textContent = msg; errEl.style.display = 'block'; }
   else { errEl.style.display = 'none'; }
+  // Mostrar botón Google solo en path raíz (superadmin)
+  const isRoot = !window.location.pathname.match(/^\/t\//);
+  document.getElementById('login-google-wrap').style.display = isRoot ? 'block' : 'none';
   document.getElementById('login-username').focus();
+}
+
+function show2FAStep(partial_token, hint = '') {
+  _partial_token = partial_token;
+  document.getElementById('login-form-panel').style.display = 'none';
+  document.getElementById('login-2fa-panel').style.display = 'block';
+  if (hint) document.getElementById('login-2fa-hint').textContent = hint;
+  document.getElementById('login-2fa-code').value = '';
+  document.getElementById('login-2fa-recovery').value = '';
+  document.getElementById('login-2fa-error').style.display = 'none';
+  document.getElementById('login-2fa-code-wrap').style.display = 'block';
+  document.getElementById('login-2fa-recovery-wrap').style.display = 'none';
+  document.getElementById('login-2fa-toggle-text').textContent = '¿Perdiste tu teléfono? Usar código de recuperación';
+  document.getElementById('login-2fa-code').focus();
+  document.getElementById('login-2fa-code').onkeydown = (e) => { if (e.key === 'Enter') do2FAVerify(); };
+  document.getElementById('login-2fa-recovery').onkeydown = (e) => { if (e.key === 'Enter') do2FAVerify(); };
+}
+
+function show2FABack() {
+  _partial_token = null;
+  document.getElementById('login-form-panel').style.display = 'block';
+  document.getElementById('login-2fa-panel').style.display = 'none';
+}
+
+function toggle2FARecovery() {
+  const codeWrap = document.getElementById('login-2fa-code-wrap');
+  const recovWrap = document.getElementById('login-2fa-recovery-wrap');
+  const toggleText = document.getElementById('login-2fa-toggle-text');
+  const isCode = codeWrap.style.display !== 'none';
+  codeWrap.style.display = isCode ? 'none' : 'block';
+  recovWrap.style.display = isCode ? 'block' : 'none';
+  toggleText.textContent = isCode ? '← Volver al código del autenticador' : '¿Perdiste tu teléfono? Usar código de recuperación';
+  document.getElementById('login-2fa-error').style.display = 'none';
+}
+
+async function do2FAVerify() {
+  const code         = document.getElementById('login-2fa-code').value.trim();
+  const recoveryCode = document.getElementById('login-2fa-recovery').value.trim();
+  const errEl        = document.getElementById('login-2fa-error');
+  const btn          = document.getElementById('login-2fa-btn');
+  errEl.style.display = 'none';
+  if (!code && !recoveryCode) {
+    errEl.textContent = 'Ingresa el código'; errEl.style.display = 'block'; return;
+  }
+  btn.disabled = true; btn.textContent = 'Verificando...';
+  try {
+    const body = recoveryCode
+      ? { partial_token: _partial_token, recovery_code: recoveryCode }
+      : { partial_token: _partial_token, code };
+    const res = await fetch('/api/auth/totp-verify', {
+      method: 'POST', headers: {'Content-Type':'application/json'},
+      body: JSON.stringify(body)
+    });
+    const data = await res.json();
+    if (!res.ok) {
+      errEl.textContent = data.error || 'Código incorrecto'; errEl.style.display = 'block'; return;
+    }
+    _partial_token = null;
+    localStorage.setItem('aesspos_token',  data.token);
+    localStorage.setItem('aesspos_exp',    String(data.exp));
+    localStorage.setItem('aesspos_user',   JSON.stringify(data.user));
+    localStorage.setItem('aesspos_tienda', JSON.stringify(data.tienda));
+    await iniciarApp(data.user, data.tienda);
+  } catch(e) {
+    errEl.textContent = 'Error de conexión'; errEl.style.display = 'block';
+  } finally {
+    btn.disabled = false; btn.textContent = 'Verificar';
+  }
 }
 
 async function doLogin() {
@@ -1663,7 +1779,6 @@ async function doLogin() {
     errEl.textContent = 'Ingresa usuario y contraseña'; errEl.style.display = 'block'; return;
   }
   btn.disabled = true; btn.textContent = 'Ingresando...';
-  // Leer slug de la URL (ej: /t/granero-ambar)
   const slugMatch = window.location.pathname.match(/^\/t\/([^/]+)/);
   const tienda_slug = slugMatch ? slugMatch[1] : '';
   try {
@@ -1676,6 +1791,9 @@ async function doLogin() {
     if (!res.ok) {
       errEl.textContent = data.error || 'Credenciales incorrectas';
       errEl.style.display = 'block'; return;
+    }
+    if (data.needs_2fa) {
+      show2FAStep(data.partial_token); return;
     }
     localStorage.setItem('aesspos_token',  data.token);
     localStorage.setItem('aesspos_exp',    String(data.exp));
@@ -3198,6 +3316,7 @@ async function iniciarApp(user, tienda) {
     document.getElementById('screen-superadmin').style.display = 'flex';
     document.getElementById('screen-superadmin').classList.add('active');
     await renderSuperadmin();
+    await renderSecurityPanel();
   } else {
     // Modo determinado por rol
     const modo = user.rol === 'admin' ? 'admin' : 'cajero';
@@ -3542,6 +3661,155 @@ async function toggleUsuarioActivoAdmin(userId, nuevoActivo) {
   await renderPanelUsuarios();
 }
 
+async function renderSecurityPanel() {
+  const panel = document.getElementById('security-panel');
+  if (!panel) return;
+  panel.innerHTML = '<p style="color:var(--text-2); font-size:13px;">Cargando...</p>';
+  try {
+    const res = await apiFetch('/api/auth/me');
+    if (!res) return;
+    const me = await res.json();
+
+    const totpEnabled = me.totp_enabled;
+    const googleEmail = me.google_email || null;
+    const recoveryCodes = me.recovery_codes_remaining ?? 0;
+
+    panel.innerHTML = `
+      <div style="display:flex; flex-direction:column; gap:16px; max-width:480px;">
+        <!-- Google Login -->
+        <div style="background:var(--surface); border:1px solid var(--border); border-radius:12px; padding:16px;">
+          <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:8px;">
+            <span style="font-weight:600; font-size:14px;">Acceso con Google</span>
+            <span style="font-size:12px; padding:2px 8px; border-radius:20px; background:${googleEmail ? 'var(--success-bg,#dcfce7)' : 'var(--surface-2,#f1f5f9)'}; color:${googleEmail ? 'var(--success,#16a34a)' : 'var(--text-2)'};">
+              ${googleEmail ? 'Vinculado' : 'No vinculado'}
+            </span>
+          </div>
+          ${googleEmail
+            ? `<p style="font-size:13px; color:var(--text-2); margin-bottom:12px;">${esc(googleEmail)}</p>
+               <button class="btn-secondary" style="font-size:13px;" onclick="desvincularGoogle()">Desvincular cuenta Google</button>`
+            : `<p style="font-size:13px; color:var(--text-2); margin-bottom:12px;">Vincula tu cuenta Google para iniciar sesión con un clic.</p>
+               <button class="btn-secondary" style="font-size:13px;" onclick="vincularGoogle()">Vincular cuenta Google</button>`
+          }
+        </div>
+
+        <!-- 2FA TOTP -->
+        <div style="background:var(--surface); border:1px solid var(--border); border-radius:12px; padding:16px;">
+          <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:8px;">
+            <span style="font-weight:600; font-size:14px;">Autenticación de dos factores (TOTP)</span>
+            <span style="font-size:12px; padding:2px 8px; border-radius:20px; background:${totpEnabled ? 'var(--success-bg,#dcfce7)' : 'var(--surface-2,#f1f5f9)'}; color:${totpEnabled ? 'var(--success,#16a34a)' : 'var(--text-2)'};">
+              ${totpEnabled ? 'Activado' : 'Desactivado'}
+            </span>
+          </div>
+          ${totpEnabled
+            ? `<p style="font-size:13px; color:var(--text-2); margin-bottom:4px;">Códigos de recuperación disponibles: <strong>${recoveryCodes}</strong></p>
+               ${recoveryCodes < 3 ? '<p style="font-size:12px; color:var(--warning,#d97706); margin-bottom:12px;">⚠ Pocos códigos restantes. Desactiva y reactiva 2FA para regenerarlos.</p>' : '<p style="font-size:13px; color:var(--text-2); margin-bottom:12px;"> </p>'}
+               <div style="display:flex; gap:8px; flex-wrap:wrap;">
+                 <button class="btn-secondary" style="font-size:13px;" onclick="mostrar2FADesactivar()">Desactivar 2FA</button>
+               </div>
+               <div id="disable-2fa-form" style="display:none; margin-top:12px;">
+                 <p style="font-size:13px; color:var(--text-2); margin-bottom:8px;">Ingresa tu código TOTP actual para confirmar:</p>
+                 <input type="text" id="disable-2fa-code" class="form-input" placeholder="000000" maxlength="6" inputmode="numeric" style="max-width:160px; margin-bottom:8px; font-size:18px; letter-spacing:.15em; text-align:center;">
+                 <div style="display:flex; gap:8px;">
+                   <button class="btn-danger" style="font-size:13px;" onclick="confirmarDesactivar2FA()">Confirmar desactivar</button>
+                   <button class="btn-secondary" style="font-size:13px;" onclick="document.getElementById('disable-2fa-form').style.display='none'">Cancelar</button>
+                 </div>
+               </div>`
+            : `<p style="font-size:13px; color:var(--text-2); margin-bottom:12px;">Protege tu cuenta con una app autenticadora (Google Authenticator, Authy, etc.).</p>
+               <button class="btn-primary" style="font-size:13px;" onclick="iniciar2FASetup()">Activar 2FA</button>
+               <div id="setup-2fa-form" style="display:none; margin-top:16px; padding:16px; background:var(--bg); border-radius:8px;">
+                 <p style="font-size:13px; font-weight:600; margin-bottom:8px;">1. Escanea este código con tu app autenticadora:</p>
+                 <p id="setup-2fa-uri" style="font-size:11px; word-break:break-all; color:var(--text-2); background:var(--surface); padding:8px; border-radius:6px; margin-bottom:12px;"></p>
+                 <p style="font-size:13px; font-weight:600; margin-bottom:4px;">2. O ingresa la clave secreta manualmente:</p>
+                 <p id="setup-2fa-secret" style="font-family:monospace; font-size:14px; letter-spacing:.1em; margin-bottom:12px; color:var(--text-1);"></p>
+                 <p style="font-size:13px; font-weight:600; margin-bottom:8px;">3. Ingresa el código que muestra la app para confirmar:</p>
+                 <input type="text" id="setup-2fa-code" class="form-input" placeholder="000000" maxlength="6" inputmode="numeric" style="max-width:160px; margin-bottom:8px; font-size:18px; letter-spacing:.15em; text-align:center;">
+                 <div style="display:flex; gap:8px;">
+                   <button class="btn-primary" style="font-size:13px;" onclick="confirmar2FASetup()">Activar</button>
+                   <button class="btn-secondary" style="font-size:13px;" onclick="document.getElementById('setup-2fa-form').style.display='none'">Cancelar</button>
+                 </div>
+               </div>`
+          }
+        </div>
+      </div>`;
+
+    document.getElementById('disable-2fa-code')?.addEventListener('keydown', e => { if (e.key === 'Enter') confirmarDesactivar2FA(); });
+    document.getElementById('setup-2fa-code')?.addEventListener('keydown', e => { if (e.key === 'Enter') confirmar2FASetup(); });
+  } catch(e) {
+    panel.innerHTML = '<p style="color:var(--danger); font-size:13px;">Error cargando configuración de seguridad</p>';
+  }
+}
+
+async function iniciar2FASetup() {
+  const form = document.getElementById('setup-2fa-form');
+  if (!form) return;
+  form.style.display = 'none';
+  const res = await apiFetch('/api/auth/2fa/setup', { method: 'POST' });
+  if (!res) return;
+  if (!res.ok) { const d = await res.json(); showToast('⚠ ' + d.error); return; }
+  const data = await res.json();
+  document.getElementById('setup-2fa-uri').textContent = data.provisioning_uri;
+  document.getElementById('setup-2fa-secret').textContent = data.secret;
+  form.style.display = 'block';
+  document.getElementById('setup-2fa-code').focus();
+}
+
+async function confirmar2FASetup() {
+  const code = (document.getElementById('setup-2fa-code')?.value || '').trim();
+  if (!code) { showToast('⚠ Ingresa el código de 6 dígitos'); return; }
+  const res = await apiFetch('/api/auth/2fa/confirm', {
+    method: 'POST',
+    body: JSON.stringify({ code })
+  });
+  if (!res) return;
+  const data = await res.json();
+  if (!res.ok) { showToast('⚠ ' + (data.error || 'Código incorrecto')); return; }
+  // Show recovery codes once
+  const codes = data.recovery_codes || [];
+  alert('2FA activado exitosamente.\n\nCódigos de recuperación (guárdalos en un lugar seguro, no se mostrarán de nuevo):\n\n' + codes.join('\n'));
+  showToast('✅ 2FA activado');
+  await renderSecurityPanel();
+}
+
+function mostrar2FADesactivar() {
+  const f = document.getElementById('disable-2fa-form');
+  if (f) { f.style.display = 'block'; document.getElementById('disable-2fa-code').focus(); }
+}
+
+async function confirmarDesactivar2FA() {
+  const code = (document.getElementById('disable-2fa-code')?.value || '').trim();
+  if (!code) { showToast('⚠ Ingresa el código TOTP'); return; }
+  const res = await apiFetch('/api/auth/2fa/disable', {
+    method: 'POST',
+    body: JSON.stringify({ code })
+  });
+  if (!res) return;
+  if (!res.ok) { const d = await res.json(); showToast('⚠ ' + (d.error || 'Código incorrecto')); return; }
+  showToast('✅ 2FA desactivado');
+  await renderSecurityPanel();
+}
+
+async function vincularGoogle() {
+  const email = prompt('Ingresa tu dirección de Gmail que usarás para iniciar sesión:');
+  if (!email || !email.includes('@')) return;
+  const res = await apiFetch('/api/auth/2fa/link-google', {
+    method: 'POST',
+    body: JSON.stringify({ google_email: email.trim().toLowerCase() })
+  });
+  if (!res) return;
+  if (!res.ok) { const d = await res.json(); showToast('⚠ ' + (d.error || 'Error')); return; }
+  showToast('✅ Cuenta Google vinculada');
+  await renderSecurityPanel();
+}
+
+async function desvincularGoogle() {
+  if (!confirm('¿Desvincular tu cuenta Google? Podrás seguir iniciando sesión con tu contraseña.')) return;
+  const res = await apiFetch('/api/auth/2fa/link-google', { method: 'DELETE' });
+  if (!res) return;
+  if (!res.ok) { const d = await res.json(); showToast('⚠ ' + (d.error || 'Error')); return; }
+  showToast('✅ Cuenta Google desvinculada');
+  await renderSecurityPanel();
+}
+
 function iniciarCheckExpiracion() {
   if (_expiryCheckInterval) clearInterval(_expiryCheckInterval);
   _expiryCheckInterval = setInterval(() => {
@@ -3574,6 +3842,33 @@ function iniciarCheckExpiracion() {
         el.style.display = 'block';
       }
     } catch(e) { /* continuar igual */ }
+  }
+
+  // Manejar callback de Google OAuth (?cb_token=...) o 2FA (?partial_token=...) o error
+  const params = new URLSearchParams(window.location.search);
+  if (params.has('auth_error')) {
+    history.replaceState({}, '', window.location.pathname);
+    showLoginScreen(params.get('auth_error'));
+    return;
+  }
+  if (params.has('cb_token')) {
+    const cbToken = params.get('cb_token');
+    const cbExp   = parseInt(params.get('cb_exp') || '0');
+    const cbUser  = JSON.parse(decodeURIComponent(params.get('cb_user') || '{}'));
+    history.replaceState({}, '', window.location.pathname);
+    localStorage.setItem('aesspos_token',  cbToken);
+    localStorage.setItem('aesspos_exp',    String(cbExp));
+    localStorage.setItem('aesspos_user',   JSON.stringify(cbUser));
+    localStorage.setItem('aesspos_tienda', 'null');
+    await iniciarApp(cbUser, null);
+    return;
+  }
+  if (params.has('partial_token')) {
+    const pt = params.get('partial_token');
+    history.replaceState({}, '', window.location.pathname);
+    showLoginScreen();
+    show2FAStep(pt, 'Ingresa el código de tu app autenticadora para continuar');
+    return;
   }
 
   const token = localStorage.getItem('aesspos_token');

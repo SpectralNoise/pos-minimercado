@@ -4,7 +4,7 @@ POS Mini Mercado - Servidor local
 Puerto 5051 · Sirve index.html, REST API SQLite, y endpoints de IA
 """
 
-import os, json, mimetypes, ssl, sqlite3, base64, io, urllib.request, urllib.error, socketserver
+import os, json, mimetypes, ssl, sqlite3, base64, io, urllib.request, urllib.error, urllib.parse, socketserver, struct
 import hmac as _hmac, hashlib, time, secrets  # secrets usado en init_db (seed) y _create_usuario
 from http.server import HTTPServer, BaseHTTPRequestHandler
 from pathlib import Path
@@ -36,7 +36,11 @@ ANTHROPIC_API_KEY = os.environ.get("ANTHROPIC_API_KEY", "")
 TURSO_URL         = os.environ.get("TURSO_URL", "")
 TURSO_TOKEN       = os.environ.get("TURSO_TOKEN", "")
 
-SECRET_KEY = os.environ.get("SECRET_KEY", "")
+SECRET_KEY           = os.environ.get("SECRET_KEY", "")
+GOOGLE_CLIENT_ID     = os.environ.get("GOOGLE_CLIENT_ID", "")
+GOOGLE_CLIENT_SECRET = os.environ.get("GOOGLE_CLIENT_SECRET", "")
+GOOGLE_REDIRECT_URI  = os.environ.get("GOOGLE_REDIRECT_URI", "")
+
 if not SECRET_KEY:
     raise RuntimeError(
         "[AESSPOS] SECRET_KEY no configurada.\n"
@@ -151,6 +155,39 @@ def get_db():
     conn.row_factory = sqlite3.Row
     return conn
 
+# ── TOTP (RFC 6238 — stdlib only) ──────────────────────────────────
+def _totp_generate_secret():
+    return base64.b32encode(secrets.token_bytes(20)).decode().rstrip("=")
+
+def _totp_code(secret_b32, t=None):
+    if t is None:
+        t = int(time.time()) // 30
+    secret_b32 = secret_b32.upper()
+    padding = (8 - len(secret_b32) % 8) % 8
+    key = base64.b32decode(secret_b32 + "=" * padding)
+    msg = struct.pack(">Q", t)
+    h = _hmac.new(key, msg, hashlib.sha1).digest()
+    offset = h[-1] & 0xf
+    code = struct.unpack(">I", h[offset:offset + 4])[0] & 0x7fffffff
+    return str(code % 1_000_000).zfill(6)
+
+def _totp_verify(secret_b32, code, window=1):
+    t = int(time.time()) // 30
+    code = str(code).strip().zfill(6)
+    for i in range(-window, window + 1):
+        if _hmac.compare_digest(_totp_code(secret_b32, t + i), code):
+            return True
+    return False
+
+def _generate_recovery_codes():
+    codes = []
+    for _ in range(10):
+        codes.append("-".join(secrets.token_hex(3).upper() for _ in range(3)))
+    return codes
+
+def _hash_recovery_code(code):
+    return hashlib.sha256(code.strip().upper().replace("-", "").encode()).hexdigest()
+
 def _hash_password(password: str, salt: str) -> str:
     return hashlib.pbkdf2_hmac('sha256', password.encode(), salt.encode(), 260000).hex()
 
@@ -247,6 +284,27 @@ def init_db():
         except (sqlite3.OperationalError, ValueError) as e:
             if "duplicate column name" not in str(e):
                 raise
+    # Migraciones 2FA / Google OAuth
+    for col, definition in [
+        ('google_email',  'TEXT DEFAULT NULL'),
+        ('totp_secret',   'TEXT DEFAULT NULL'),
+        ('totp_enabled',  'INTEGER DEFAULT 0'),
+    ]:
+        try:
+            conn.execute(f"ALTER TABLE usuarios ADD COLUMN {col} {definition}")
+            conn.commit()
+        except (sqlite3.OperationalError, ValueError) as e:
+            if "duplicate column name" not in str(e):
+                raise
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS recovery_codes (
+            id         INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id    INTEGER NOT NULL REFERENCES usuarios(id) ON DELETE CASCADE,
+            code_hash  TEXT NOT NULL,
+            created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+        )
+    """)
+    conn.commit()
     # Seed superadmin (solo si no hay usuarios)
     if conn.execute("SELECT COUNT(*) FROM usuarios").fetchone()[0] == 0:
         _pw = secrets.token_urlsafe(12)
@@ -323,6 +381,273 @@ class Handler(BaseHTTPRequestHandler):
         except Exception:
             self.send_error_json("Token inválido", 401); return None
 
+    def _make_partial_token(self, user_id):
+        """Token de 5 min para el paso de 2FA."""
+        exp = int(time.time()) + 300
+        payload = f"partial:{user_id}:{exp}"
+        sig = base64.urlsafe_b64encode(
+            _hmac.new(SECRET_KEY.encode(), payload.encode(), hashlib.sha256).digest()
+        ).decode().rstrip("=")
+        return base64.urlsafe_b64encode(f"{payload}.{sig}".encode()).decode()
+
+    def _verify_partial_token(self, token):
+        try:
+            decoded = base64.urlsafe_b64decode(token + "==").decode()
+            payload, sig = decoded.rsplit(".", 1)
+            expected = base64.urlsafe_b64encode(
+                _hmac.new(SECRET_KEY.encode(), payload.encode(), hashlib.sha256).digest()
+            ).decode().rstrip("=")
+            if not _hmac.compare_digest(sig, expected):
+                return None
+            prefix, user_id_s, exp_s = payload.split(":", 2)
+            if prefix != "partial" or int(exp_s) < int(time.time()):
+                return None
+            return int(user_id_s)
+        except Exception:
+            return None
+
+    def _get_redirect_uri(self):
+        if GOOGLE_REDIRECT_URI:
+            return GOOGLE_REDIRECT_URI
+        host = self.headers.get("Host", "localhost:5051")
+        scheme = "https" if any(x in host for x in ("railway", "aesspos")) else "http"
+        return f"{scheme}://{host}/api/auth/google/callback"
+
+    def _redirect_login_error(self, msg):
+        self.send_response(302)
+        self.send_header("Location", f"/?auth_error={urllib.parse.quote(msg)}")
+        self.end_headers()
+
+    def _auth_google_redirect(self):
+        if not GOOGLE_CLIENT_ID:
+            self.send_error_json("Google OAuth no configurado", 501); return
+        params = urllib.parse.urlencode({
+            "client_id":     GOOGLE_CLIENT_ID,
+            "redirect_uri":  self._get_redirect_uri(),
+            "response_type": "code",
+            "scope":         "openid email profile",
+            "state":         base64.urlsafe_b64encode(secrets.token_bytes(16)).decode().rstrip("="),
+        })
+        self.send_response(302)
+        self.send_header("Location", f"https://accounts.google.com/o/oauth2/v2/auth?{params}")
+        self.end_headers()
+
+    def _auth_google_callback(self):
+        if not GOOGLE_CLIENT_ID:
+            self._redirect_login_error("Google OAuth no configurado"); return
+        try:
+            qs = urllib.parse.parse_qs(self.path.split("?", 1)[1] if "?" in self.path else "")
+            code = qs.get("code", [""])[0]
+            if not code:
+                self._redirect_login_error("Google: código de autorización no recibido"); return
+            # Intercambiar código por tokens
+            req = urllib.request.Request(
+                "https://oauth2.googleapis.com/token",
+                data=urllib.parse.urlencode({
+                    "code": code, "client_id": GOOGLE_CLIENT_ID,
+                    "client_secret": GOOGLE_CLIENT_SECRET,
+                    "redirect_uri": self._get_redirect_uri(),
+                    "grant_type": "authorization_code",
+                }).encode(),
+                headers={"Content-Type": "application/x-www-form-urlencoded"},
+                method="POST"
+            )
+            with urllib.request.urlopen(req, timeout=10) as r:
+                token_resp = json.loads(r.read())
+            # Decodificar id_token (JWT) para obtener el email
+            id_token = token_resp.get("id_token", "")
+            parts = id_token.split(".")
+            if len(parts) < 2:
+                self._redirect_login_error("Token de Google inválido"); return
+            jwt_payload = json.loads(base64.urlsafe_b64decode(parts[1] + "=="))
+            google_email = jwt_payload.get("email", "").lower()
+            if not google_email:
+                self._redirect_login_error("No se pudo obtener email de Google"); return
+            # Buscar superadmin vinculado a este email
+            conn = get_db()
+            try:
+                user = conn.execute(
+                    "SELECT * FROM usuarios WHERE google_email=? AND tienda_id IS NULL AND rol='superadmin'",
+                    (google_email,)
+                ).fetchone()
+            finally:
+                conn.close()
+            if not user:
+                self._redirect_login_error(
+                    f"El email {google_email} no está vinculado a ninguna cuenta superadmin"
+                ); return
+            if not user["activo"]:
+                self._redirect_login_error("Cuenta inactiva"); return
+            # 2FA
+            if user["totp_enabled"]:
+                partial = self._make_partial_token(user["id"])
+                self.send_response(302)
+                self.send_header("Location", f"/?partial_token={urllib.parse.quote(partial)}")
+                self.end_headers()
+            else:
+                token, exp = self._make_token(user["id"], None, "superadmin")
+                user_json = urllib.parse.quote(json.dumps({
+                    "id": user["id"], "nombre": user["nombre"],
+                    "username": user["username"], "rol": "superadmin", "tienda_id": None,
+                    "totp_enabled": bool(user["totp_enabled"]), "google_email": user["google_email"],
+                }))
+                self.send_response(302)
+                self.send_header("Location", f"/?cb_token={urllib.parse.quote(token)}&cb_exp={exp}&cb_user={user_json}")
+                self.end_headers()
+        except Exception as e:
+            self._redirect_login_error(f"Error: {str(e)}")
+
+    def _auth_totp_verify(self):
+        try:
+            body = self.read_json_body()
+            partial_token   = body.get("partial_token", "")
+            code            = body.get("code", "").strip()
+            recovery_code   = body.get("recovery_code", "").strip().upper()
+            user_id = self._verify_partial_token(partial_token)
+            if not user_id:
+                self.send_error_json("Token expirado o inválido. Vuelve a iniciar sesión.", 401); return
+            conn = get_db()
+            try:
+                user = conn.execute("SELECT * FROM usuarios WHERE id=?", (user_id,)).fetchone()
+                if not user or not user["activo"]:
+                    self.send_error_json("Usuario no encontrado", 401); return
+                if recovery_code:
+                    code_hash = _hash_recovery_code(recovery_code)
+                    rc = conn.execute(
+                        "SELECT id FROM recovery_codes WHERE user_id=? AND code_hash=?",
+                        (user_id, code_hash)
+                    ).fetchone()
+                    if not rc:
+                        self.send_error_json("Código de recuperación inválido", 401); return
+                    conn.execute("DELETE FROM recovery_codes WHERE id=?", (rc["id"],))
+                    conn.commit()
+                elif code:
+                    if not user["totp_secret"] or not _totp_verify(user["totp_secret"], code):
+                        self.send_error_json("Código incorrecto", 401); return
+                else:
+                    self.send_error_json("Falta código", 400); return
+                tienda = None
+                if user["tienda_id"] is not None:
+                    t = conn.execute("SELECT * FROM tiendas WHERE id=?", (user["tienda_id"],)).fetchone()
+                    if t:
+                        tienda = {"id": t["id"], "nombre": t["nombre"], "slug": t["slug"]}
+                token, exp = self._make_token(user["id"], user["tienda_id"], user["rol"])
+                self.send_json({
+                    "token": token, "exp": exp,
+                    "user": {"id": user["id"], "nombre": user["nombre"], "username": user["username"],
+                             "rol": user["rol"], "tienda_id": user["tienda_id"],
+                             "totp_enabled": bool(user["totp_enabled"]), "google_email": user["google_email"]},
+                    "tienda": tienda
+                })
+            finally:
+                conn.close()
+        except Exception as e:
+            self.send_error_json(str(e), 500)
+
+    def _auth_2fa_setup(self):
+        ctx = self.require_auth()
+        if not ctx: return
+        if ctx.rol != 'superadmin':
+            self.send_error_json("Solo el superadmin puede configurar 2FA", 403); return
+        secret = _totp_generate_secret()
+        conn = get_db()
+        try:
+            user = conn.execute("SELECT username FROM usuarios WHERE id=?", (ctx.user_id,)).fetchone()
+            conn.execute("UPDATE usuarios SET totp_secret=? WHERE id=?", (secret, ctx.user_id))
+            conn.commit()
+            uri = f"otpauth://totp/AESSPOS:{user['username']}?secret={secret}&issuer=AESSPOS"
+            self.send_json({"secret": secret, "uri": uri})
+        finally:
+            conn.close()
+
+    def _auth_2fa_confirm(self):
+        ctx = self.require_auth()
+        if not ctx: return
+        if ctx.rol != 'superadmin':
+            self.send_error_json("Solo el superadmin puede configurar 2FA", 403); return
+        try:
+            body = self.read_json_body()
+            code = body.get("code", "").strip()
+            conn = get_db()
+            try:
+                user = conn.execute("SELECT * FROM usuarios WHERE id=?", (ctx.user_id,)).fetchone()
+                if not user["totp_secret"]:
+                    self.send_error_json("Primero genera el secreto con /api/auth/2fa/setup", 400); return
+                if not _totp_verify(user["totp_secret"], code):
+                    self.send_error_json("Código incorrecto. Verifica que la hora de tu dispositivo sea correcta.", 401); return
+                conn.execute("UPDATE usuarios SET totp_enabled=1 WHERE id=?", (ctx.user_id,))
+                codes = _generate_recovery_codes()
+                conn.execute("DELETE FROM recovery_codes WHERE user_id=?", (ctx.user_id,))
+                for c in codes:
+                    conn.execute("INSERT INTO recovery_codes (user_id, code_hash) VALUES (?,?)",
+                                 (ctx.user_id, _hash_recovery_code(c)))
+                conn.commit()
+                self.send_json({"ok": True, "recovery_codes": codes})
+            finally:
+                conn.close()
+        except Exception as e:
+            self.send_error_json(str(e), 500)
+
+    def _auth_2fa_disable(self):
+        ctx = self.require_auth()
+        if not ctx: return
+        if ctx.rol != 'superadmin':
+            self.send_error_json("Solo el superadmin puede configurar 2FA", 403); return
+        try:
+            body = self.read_json_body()
+            code = body.get("code", "").strip()
+            conn = get_db()
+            try:
+                user = conn.execute("SELECT * FROM usuarios WHERE id=?", (ctx.user_id,)).fetchone()
+                if not user["totp_enabled"]:
+                    self.send_error_json("El 2FA no está activo", 400); return
+                if not _totp_verify(user["totp_secret"], code):
+                    self.send_error_json("Código incorrecto", 401); return
+                conn.execute("UPDATE usuarios SET totp_enabled=0, totp_secret=NULL WHERE id=?", (ctx.user_id,))
+                conn.execute("DELETE FROM recovery_codes WHERE user_id=?", (ctx.user_id,))
+                conn.commit()
+                self.send_json({"ok": True})
+            finally:
+                conn.close()
+        except Exception as e:
+            self.send_error_json(str(e), 500)
+
+    def _auth_2fa_link_google(self):
+        ctx = self.require_auth()
+        if not ctx: return
+        if ctx.rol != 'superadmin':
+            self.send_error_json("Acceso denegado", 403); return
+        try:
+            body = self.read_json_body()
+            google_email = body.get("google_email", "").strip().lower()
+            if not google_email or "@" not in google_email:
+                self.send_error_json("Email inválido", 400); return
+            conn = get_db()
+            try:
+                conn.execute("UPDATE usuarios SET google_email=? WHERE id=?", (google_email, ctx.user_id))
+                conn.commit()
+                self.send_json({"ok": True})
+            finally:
+                conn.close()
+        except Exception as e:
+            self.send_error_json(str(e), 500)
+
+    def _auth_unlink_google(self):
+        ctx = self.require_auth()
+        if not ctx: return
+        if ctx.rol != 'superadmin':
+            self.send_error_json("Acceso denegado", 403); return
+        try:
+            conn = get_db()
+            try:
+                conn.execute("UPDATE usuarios SET google_email=NULL WHERE id=?", (ctx.user_id,))
+                conn.commit()
+                self.send_json({"ok": True})
+            finally:
+                conn.close()
+        except Exception as e:
+            self.send_error_json(str(e), 500)
+
     def _make_token(self, user_id, tienda_id, rol):
         """Genera token HMAC-SHA256 con 12h de expiración."""
         exp = int(time.time()) + 43200
@@ -372,6 +697,10 @@ class Handler(BaseHTTPRequestHandler):
                 expected_hash = _hash_password(password, user["salt"])
                 if not _hmac.compare_digest(expected_hash, user["password_hash"]):
                     self.send_error_json("Credenciales incorrectas", 401); return
+                # 2FA — si está activo, devolver partial token
+                if user["totp_enabled"]:
+                    partial = self._make_partial_token(user["id"])
+                    self.send_json({"needs_2fa": True, "partial_token": partial}); return
                 # Verificar tienda activa (si aplica)
                 tienda = None
                 if user["tienda_id"] is not None:
@@ -381,15 +710,9 @@ class Handler(BaseHTTPRequestHandler):
                     tienda = {"id": tienda_row["id"], "nombre": tienda_row["nombre"], "slug": tienda_row["slug"]}
                 token, exp = self._make_token(user["id"], user["tienda_id"], user["rol"])
                 self.send_json({
-                    "token": token,
-                    "exp": exp,
-                    "user": {
-                        "id": user["id"],
-                        "nombre": user["nombre"],
-                        "username": user["username"],
-                        "rol": user["rol"],
-                        "tienda_id": user["tienda_id"]
-                    },
+                    "token": token, "exp": exp,
+                    "user": {"id": user["id"], "nombre": user["nombre"], "username": user["username"],
+                             "rol": user["rol"], "tienda_id": user["tienda_id"]},
                     "tienda": tienda
                 })
             finally:
@@ -411,13 +734,19 @@ class Handler(BaseHTTPRequestHandler):
                     t = conn.execute("SELECT * FROM tiendas WHERE id=?", (ctx.tienda_id,)).fetchone()
                     if t:
                         tienda = {"id": t["id"], "nombre": t["nombre"], "slug": t["slug"]}
+                rc_count = conn.execute(
+                    "SELECT COUNT(*) FROM recovery_codes WHERE user_id=?", (user["id"],)
+                ).fetchone()[0]
                 self.send_json({
                     "user": {
                         "id": user["id"],
                         "nombre": user["nombre"],
                         "username": user["username"],
                         "rol": user["rol"],
-                        "tienda_id": user["tienda_id"]
+                        "tienda_id": user["tienda_id"],
+                        "totp_enabled": bool(user["totp_enabled"]),
+                        "google_email": user["google_email"],
+                        "recovery_codes_remaining": rc_count,
                     },
                     "tienda": tienda
                 })
@@ -452,6 +781,10 @@ class Handler(BaseHTTPRequestHandler):
             self.send_json({"db": "turso" if USE_TURSO else "sqlite", "turso_url": bool(TURSO_URL), "libsql_ok": _LIBSQL_OK})
         elif path == "/api/auth/me":
             self._auth_me()
+        elif path == "/api/auth/google":
+            self._auth_google_redirect()
+        elif path.startswith("/api/auth/google/callback"):
+            self._auth_google_callback()
         elif path == "/api/tiendas":
             self._list_tiendas()
         elif path.startswith("/api/tiendas/by-slug/"):
@@ -588,6 +921,16 @@ class Handler(BaseHTTPRequestHandler):
     def do_POST(self):
         if self.path == "/api/auth/login":
             self._auth_login(); return
+        elif self.path == "/api/auth/totp-verify":
+            self._auth_totp_verify(); return
+        elif self.path == "/api/auth/2fa/setup":
+            self._auth_2fa_setup(); return
+        elif self.path == "/api/auth/2fa/confirm":
+            self._auth_2fa_confirm(); return
+        elif self.path == "/api/auth/2fa/disable":
+            self._auth_2fa_disable(); return
+        elif self.path == "/api/auth/2fa/link-google":
+            self._auth_2fa_link_google(); return
         elif self.path == "/api/productos":
             self._create_producto()
         elif self.path == "/api/ventas":
@@ -638,7 +981,9 @@ class Handler(BaseHTTPRequestHandler):
     # ── DELETE ─────────────────────────────────────────────────────
     def do_DELETE(self):
         parts = self.path.split("/")
-        if len(parts) == 4 and parts[2] == "productos":
+        if self.path == "/api/auth/2fa/link-google":
+            self._auth_unlink_google()
+        elif len(parts) == 4 and parts[2] == "productos":
             self._delete_producto(parts[3])
         elif len(parts) == 4 and parts[2] == "tiendas" and parts[3].isdigit():
             self._delete_tienda(int(parts[3]))

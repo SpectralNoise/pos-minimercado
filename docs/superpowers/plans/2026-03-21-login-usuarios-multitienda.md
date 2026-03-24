@@ -179,7 +179,7 @@ python3 server.py
 
 Esperado: servidor arranca normalmente. Sin `SECRET_KEY` en `.env` o en el entorno, debe lanzar `RuntimeError` con el mensaje instructivo.
 
-- [ ] **Step 6: Commit**
+- [ ] **Step 7: Commit**
 
 ```bash
 git add server.py
@@ -725,9 +725,9 @@ def _close_turno(self, turno_id):
                  body.get("resumen_ia"), turno_id) + params_filter
             )
             turno = conn.execute("SELECT * FROM turnos WHERE id=?", (turno_id,)).fetchone()
-            conn.commit()
             if not turno or turno["estado"] != "cerrado":
                 self.send_error_json("Turno no encontrado o ya cerrado", 409); return
+            conn.commit()
             self.send_json(row_to_dict(turno))
         finally:
             conn.close()
@@ -866,8 +866,10 @@ def _update_tienda(self, tienda_id):
                 (body.get("nombre"), body.get("plan","basico"), int(body.get("activo",1)), tienda_id)
             )
             tienda = conn.execute("SELECT * FROM tiendas WHERE id=?", (tienda_id,)).fetchone()
+            if not tienda:
+                self.send_error_json("Tienda no encontrada", 404); return
             conn.commit()
-            self.send_json(row_to_dict(tienda) if tienda else {}, 200 if tienda else 404)
+            self.send_json(row_to_dict(tienda))
         finally:
             conn.close()
     except Exception as e:
@@ -1635,7 +1637,7 @@ async function renderSuperadmin() {
             ${tiendas.length === 0
               ? '<tr><td colspan="6" style="padding:20px; text-align:center; color:var(--text-2)">Sin tiendas registradas</td></tr>'
               : tiendas.map(t => `
-              <tr style="border-bottom:1px solid var(--border);" onclick="verDetalleTienda(${t.id})" style="cursor:pointer;">
+              <tr style="border-bottom:1px solid var(--border); cursor:pointer;" onclick="verDetalleTienda(${t.id})">
                 <td style="padding:10px 12px; font-weight:600;">${esc(t.nombre)}</td>
                 <td style="padding:10px 12px; color:var(--text-2); font-size:12px;">${esc(t.slug)}</td>
                 <td style="padding:10px 12px;">${esc(t.plan)}</td>
@@ -1658,6 +1660,8 @@ async function verDetalleTienda(tiendaId) {
   const content = document.getElementById('superadmin-content');
   content.innerHTML = '<p style="color:var(--text-2)">Cargando...</p>';
   try {
+    // Nota: /api/tiendas retorna todas las tiendas (no hay GET /api/tiendas/:id).
+    // Para evitar un endpoint extra en esta fase, obtenemos la lista y buscamos localmente.
     const [tRes, uRes] = await Promise.all([
       apiFetch(`/api/tiendas`),
       apiFetch(`/api/tiendas/${tiendaId}/usuarios`)
