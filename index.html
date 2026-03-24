@@ -3792,7 +3792,7 @@ updateThemeIcon();
 
 // ── BOOT ───────────────────────────────────────────────────────────
 async function iniciarApp(user, tienda) {
-  currentUser = user;
+  currentUser = { ...user, tienda };
   // Ocultar switcher modo — lo determina el rol
   document.querySelector('.mode-switcher').style.display = 'none';
   // Mostrar chip de usuario
