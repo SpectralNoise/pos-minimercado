@@ -3174,6 +3174,39 @@ function setMoney(id, val) {
   el.value = val ? Math.round(val).toLocaleString('es-CO') : '';
 }
 
+// ─── BEEP DE ESCÁNER (Web Audio API — sin archivos externos) ────────────────
+let _audioCtx = null;
+function _getAudioCtx() {
+  if (!_audioCtx) _audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+  return _audioCtx;
+}
+function beepScanner(type = 'ok') {
+  try {
+    const ctx = _getAudioCtx();
+    const osc = ctx.createOscillator();
+    const gain = ctx.createGain();
+    osc.connect(gain);
+    gain.connect(ctx.destination);
+    if (type === 'ok') {
+      // Bip agudo corto — producto encontrado
+      osc.frequency.setValueAtTime(1046, ctx.currentTime);       // Do6
+      osc.frequency.setValueAtTime(1318, ctx.currentTime + 0.06); // Mi6
+      gain.gain.setValueAtTime(0.18, ctx.currentTime);
+      gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.18);
+      osc.start(ctx.currentTime);
+      osc.stop(ctx.currentTime + 0.18);
+    } else {
+      // Bip grave doble — error (sin stock / no encontrado)
+      osc.frequency.setValueAtTime(220, ctx.currentTime);
+      osc.frequency.setValueAtTime(180, ctx.currentTime + 0.12);
+      gain.gain.setValueAtTime(0.15, ctx.currentTime);
+      gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.28);
+      osc.start(ctx.currentTime);
+      osc.stop(ctx.currentTime + 0.28);
+    }
+  } catch(e) { /* silenciar si el navegador bloquea audio */ }
+}
+
 function showToast(msg, type='', duration) {
   const t = document.getElementById('toast');
   // Detectar tipo por prefijo emoji si no se pasa explícitamente
@@ -3677,13 +3710,16 @@ function _processScan(barcode) {
   // ③ Pantalla de cobro → agregar al carrito
   const product = products.find(p => p.barcode === barcode);
   if (!product) {
+    beepScanner('error');
     lookupAndOffer(barcode);
     return;
   }
   if (product.stock === 0) {
+    beepScanner('error');
     showToast(`⚠ ${product.emoji} ${product.name} — sin stock`);
     return;
   }
+  beepScanner('ok');
   addToCart(product.id);
   const si = document.getElementById('search-input');
   if (si) {
