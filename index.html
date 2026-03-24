@@ -1450,7 +1450,8 @@ table.inv-table {
       </div>
       <div class="form-group">
         <label>Categoría</label>
-        <input type="text" class="form-input" id="prod-cat" placeholder="Granos, Bebidas...">
+        <input type="text" class="form-input" id="prod-cat" list="datalist-cats" placeholder="Selecciona o escribe..." autocomplete="off">
+        <datalist id="datalist-cats"></datalist>
       </div>
       <div class="form-row">
         <div class="form-group">
@@ -1579,6 +1580,19 @@ table.inv-table {
           <option value="pro">Pro</option>
         </select>
       </div>
+      <div class="form-group"><label class="form-label">Tipo de negocio</label>
+        <select class="form-input" id="tienda-tipo">
+          <option value="">— Sin especificar —</option>
+          <option value="mini_mercado">Mini mercado / Tienda de barrio</option>
+          <option value="textileria">Textilería / Hilos y telas</option>
+          <option value="panaderia">Panadería / Cafetería / Pizzería</option>
+          <option value="restaurante">Restaurante / Comidas</option>
+          <option value="papeleria">Papelería</option>
+          <option value="drogueria">Droguería / Farmacia</option>
+          <option value="ferreteria">Ferretería</option>
+          <option value="otro">Otro</option>
+        </select>
+      </div>
     </div>
     <div class="modal-footer"><button class="btn-primary" onclick="crearTienda()">Crear Tienda</button></div>
   </div>
@@ -1632,6 +1646,19 @@ table.inv-table {
         <select class="form-input" id="edit-tienda-plan">
           <option value="basico">Básico</option>
           <option value="pro">Pro</option>
+        </select>
+      </div>
+      <div class="form-group"><label class="form-label">Tipo de negocio</label>
+        <select class="form-input" id="edit-tienda-tipo">
+          <option value="">— Sin especificar —</option>
+          <option value="mini_mercado">Mini mercado / Tienda de barrio</option>
+          <option value="textileria">Textilería / Hilos y telas</option>
+          <option value="panaderia">Panadería / Cafetería / Pizzería</option>
+          <option value="restaurante">Restaurante / Comidas</option>
+          <option value="papeleria">Papelería</option>
+          <option value="drogueria">Droguería / Farmacia</option>
+          <option value="ferreteria">Ferretería</option>
+          <option value="otro">Otro</option>
         </select>
       </div>
       <div class="form-group"><label class="form-label">Estado</label>
@@ -1843,6 +1870,15 @@ function doLogout() {
 }
 
 // ─── DATOS (cargados desde API) ─────────────────
+const TIPO_CATEGORIAS = {
+  mini_mercado: ['Granos y cereales','Aceites','Lácteos','Bebidas','Dulces y snacks','Enlatados','Aseo y limpieza','Frescos','Condimentos','Panadería'],
+  textileria:   ['Hilos','Telas','Agujas y alfileres','Botones','Cierres','Encajes y cintas','Elásticos','Accesorios'],
+  panaderia:    ['Pan','Pasteles y tortas','Pizzas','Bebidas','Ingredientes','Galletas','Postres','Combos'],
+  restaurante:  ['Entradas','Platos principales','Bebidas','Postres','Combos'],
+  papeleria:    ['Útiles escolares','Cuadernos','Tintas y tóneres','Tecnología','Arte','Oficina'],
+  drogueria:    ['Medicamentos','Cuidado personal','Bebés','Vitaminas','Primeros auxilios'],
+  ferreteria:   ['Tornillos y fijaciones','Pinturas','Herramientas','Plomería','Electricidad','Adhesivos'],
+};
 let products = [];
 let _placeHolder = [
   { id:1, emoji:'🍚', name:'Arroz 500g',       barcode:'7702001001001', cat:'Granos',   price:2100, stock:48, alert:10 },
@@ -1975,6 +2011,16 @@ function renderCatPills() {
   container.innerHTML = cats.map(c =>
     `<div class="pill ${c===activeCat?'active':''}" onclick="setCategory('${c}')">${c}</div>`
   ).join('');
+}
+
+function refreshCatDatalist() {
+  const dl = document.getElementById('datalist-cats');
+  if (!dl) return;
+  const existing = [...new Set(products.map(p => p.cat).filter(Boolean))];
+  const tipo = currentUser?.tienda?.tipo || null;
+  const templates = (tipo && TIPO_CATEGORIAS[tipo]) ? TIPO_CATEGORIAS[tipo] : [];
+  const all = [...new Set([...existing, ...templates])].sort((a,b) => a.localeCompare(b,'es'));
+  dl.innerHTML = all.map(c => `<option value="${c}">`).join('');
 }
 
 function setCategory(cat) {
@@ -2858,6 +2904,7 @@ function resetPhotoZone() {
 }
 
 function openProdModal(id) {
+  refreshCatDatalist();
   resetPhotoZone();
   document.getElementById('prod-modal-title').textContent = id ? 'Editar Producto' : 'Nuevo Producto';
   if (id) {
@@ -3348,6 +3395,7 @@ async function iniciarApp(user, tienda) {
     updateCajaBar();
     await loadData();
     renderCatPills();
+    refreshCatDatalist();
     renderProducts();
     renderCart();
     renderInventario();
@@ -3410,7 +3458,7 @@ async function renderSuperadmin() {
                 <td style="padding:10px 12px;">${t.activo ? '🟢 Activa' : '🔴 Inactiva'}</td>
                 <td style="padding:10px 12px; display:flex; gap:6px; flex-wrap:wrap;">
                   <button class="btn-secondary" style="font-size:12px; padding:4px 8px;" onclick="event.stopPropagation(); verDetalleTienda(${t.id})">Ver →</button>
-                  <button class="btn-secondary" style="font-size:12px; padding:4px 8px;" onclick="event.stopPropagation(); abrirEditarTienda(${t.id},'${esc(t.nombre)}','${esc(t.slug)}','${esc(t.plan)}',${t.activo})">Editar</button>
+                  <button class="btn-secondary" style="font-size:12px; padding:4px 8px;" onclick="event.stopPropagation(); abrirEditarTienda(${t.id},'${esc(t.nombre)}','${esc(t.slug)}','${esc(t.plan)}',${t.activo},'${esc(t.tipo||'')}')">Editar</button>
                   <button class="btn-secondary" style="font-size:12px; padding:4px 8px; color:var(--danger);" onclick="event.stopPropagation(); eliminarTienda(${t.id},'${esc(t.nombre)}')">Eliminar</button>
                 </td>
               </tr>`).join('')
@@ -3441,7 +3489,7 @@ async function verDetalleTienda(tiendaId) {
     content.innerHTML = `
       <button class="btn-secondary" onclick="renderSuperadmin()" style="margin-bottom:16px;">← Volver</button>
       <h3 style="font-size:16px; font-weight:700; margin-bottom:4px;">${esc(tienda.nombre)}</h3>
-      <p style="color:var(--text-2); font-size:13px; margin-bottom:20px;">${esc(tienda.slug)} · ${esc(tienda.plan)} · ${tienda.activo ? '🟢 Activa' : '🔴 Inactiva'}</p>
+      <p style="color:var(--text-2); font-size:13px; margin-bottom:20px;">${esc(tienda.slug)} · ${esc(tienda.plan)} · ${tienda.activo ? '🟢 Activa' : '🔴 Inactiva'}${tienda.tipo ? ` · ${tienda.tipo.replace('_',' ')}` : ''}</p>
       <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:12px;">
         <h4 style="font-size:14px; font-weight:700;">Usuarios</h4>
         <button class="btn-primary" onclick="_abrirModalNuevoUsuarioSA(${tiendaId})">+ Nuevo Usuario</button>
@@ -3490,16 +3538,18 @@ async function crearTienda() {
   const nombre = document.getElementById('tienda-nombre').value.trim();
   const slug   = document.getElementById('tienda-slug').value.trim();
   const plan   = document.getElementById('tienda-plan').value;
+  const tipo   = document.getElementById('tienda-tipo').value || null;
   if (!nombre || !slug) { showToast('⚠ Ingresa nombre y slug'); return; }
   const res = await apiFetch('/api/tiendas', {
     method:'POST',
-    body: JSON.stringify({nombre, slug, plan})
+    body: JSON.stringify({nombre, slug, plan, tipo})
   });
   if (!res) return;
   if (!res.ok) { const d = await res.json(); showToast('⚠ ' + d.error); return; }
   document.getElementById('tienda-nombre').value = '';
   document.getElementById('tienda-slug').value = '';
   document.getElementById('tienda-plan').selectedIndex = 0;
+  document.getElementById('tienda-tipo').selectedIndex = 0;
   closeModal('modal-nueva-tienda');
   showToast('✅ Tienda creada');
   await renderSuperadmin();
@@ -3533,12 +3583,13 @@ async function toggleUsuarioActivo(userId, nuevoActivo, tiendaId) {
   await verDetalleTienda(tiendaId);
 }
 
-function abrirEditarTienda(id, nombre, slug, plan, activo) {
+function abrirEditarTienda(id, nombre, slug, plan, activo, tipo) {
   document.getElementById('edit-tienda-id').value = id;
   document.getElementById('edit-tienda-nombre').value = nombre;
   document.getElementById('edit-tienda-slug').value = slug;
   document.getElementById('edit-tienda-plan').value = plan;
   document.getElementById('edit-tienda-activo').value = String(activo);
+  document.getElementById('edit-tienda-tipo').value = tipo || '';
   openModal('modal-editar-tienda');
 }
 
@@ -3547,10 +3598,11 @@ async function guardarTienda() {
   const nombre = document.getElementById('edit-tienda-nombre').value.trim();
   const plan   = document.getElementById('edit-tienda-plan').value;
   const activo = parseInt(document.getElementById('edit-tienda-activo').value);
+  const tipo   = document.getElementById('edit-tienda-tipo').value || null;
   if (!nombre) { showToast('⚠ El nombre no puede estar vacío'); return; }
   const res = await apiFetch(`/api/tiendas/${id}`, {
     method:'PUT',
-    body: JSON.stringify({nombre, plan, activo})
+    body: JSON.stringify({nombre, plan, activo, tipo})
   });
   if (!res) return;
   if (!res.ok) { const d = await res.json(); showToast('⚠ ' + d.error); return; }

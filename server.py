@@ -284,6 +284,13 @@ def init_db():
         except (sqlite3.OperationalError, ValueError) as e:
             if "duplicate column name" not in str(e):
                 raise
+    # Migración: tipo de negocio en tiendas
+    try:
+        conn.execute("ALTER TABLE tiendas ADD COLUMN tipo TEXT DEFAULT NULL")
+        conn.commit()
+    except (sqlite3.OperationalError, ValueError) as e:
+        if "duplicate column name" not in str(e):
+            raise
     # Migración: reasignar productos/ventas sin tienda_id a la primera tienda (datos pre-multitienda)
     primera = conn.execute("SELECT id FROM tiendas ORDER BY id LIMIT 1").fetchone()
     if primera:
@@ -536,7 +543,7 @@ class Handler(BaseHTTPRequestHandler):
                 if user["tienda_id"] is not None:
                     t = conn.execute("SELECT * FROM tiendas WHERE id=?", (user["tienda_id"],)).fetchone()
                     if t:
-                        tienda = {"id": t["id"], "nombre": t["nombre"], "slug": t["slug"]}
+                        tienda = {"id": t["id"], "nombre": t["nombre"], "slug": t["slug"], "tipo": t["tipo"]}
                 token, exp = self._make_token(user["id"], user["tienda_id"], user["rol"])
                 self.send_json({
                     "token": token, "exp": exp,
@@ -739,7 +746,7 @@ class Handler(BaseHTTPRequestHandler):
                 if ctx.tienda_id is not None:
                     t = conn.execute("SELECT * FROM tiendas WHERE id=?", (ctx.tienda_id,)).fetchone()
                     if t:
-                        tienda = {"id": t["id"], "nombre": t["nombre"], "slug": t["slug"]}
+                        tienda = {"id": t["id"], "nombre": t["nombre"], "slug": t["slug"], "tipo": t["tipo"]}
                 rc_count = conn.execute(
                     "SELECT COUNT(*) FROM recovery_codes WHERE user_id=?", (user["id"],)
                 ).fetchone()[0]
@@ -1601,8 +1608,8 @@ Al final, un consejo breve sobre los productos sin rotación."""
             try:
                 c = conn.cursor()
                 c.execute(
-                    "INSERT INTO tiendas (nombre, slug, plan) VALUES (?,?,?)",
-                    (nombre, slug, body.get("plan","basico"))
+                    "INSERT INTO tiendas (nombre, slug, plan, tipo) VALUES (?,?,?,?)",
+                    (nombre, slug, body.get("plan","basico"), body.get("tipo") or None)
                 )
                 tienda = conn.execute("SELECT * FROM tiendas WHERE id=?", (c.lastrowid,)).fetchone()
                 conn.commit()
@@ -1628,8 +1635,9 @@ Al final, un consejo breve sobre los productos sin rotación."""
                 if not tienda:
                     self.send_error_json("Tienda no encontrada", 404); return
                 conn.execute(
-                    "UPDATE tiendas SET nombre=?, plan=?, activo=? WHERE id=?",
-                    (nombre, body.get("plan", tienda["plan"]), int(body.get("activo", tienda["activo"])), tienda_id)
+                    "UPDATE tiendas SET nombre=?, plan=?, activo=?, tipo=? WHERE id=?",
+                    (nombre, body.get("plan", tienda["plan"]), int(body.get("activo", tienda["activo"])),
+                     body.get("tipo", tienda["tipo"]), tienda_id)
                 )
                 tienda = conn.execute("SELECT * FROM tiendas WHERE id=?", (tienda_id,)).fetchone()
                 conn.commit()
