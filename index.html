@@ -8,7 +8,8 @@
 <meta name="theme-color" content="#0f172a">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-<meta name="apple-mobile-web-app-title" content="POS">
+<meta name="apple-mobile-web-app-title" content="AESSPOS">
+<link rel="icon" type="image/svg+xml" href="/favicon.svg">
 <link rel="apple-touch-icon" href="/icon-192.png">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@400;500;600;700;800;900&family=Barlow:wght@300;400;500;600&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
@@ -1048,10 +1049,23 @@ table.inv-table {
 <div id="login-screen" style="display:none; position:fixed; inset:0; z-index:9999; background:var(--bg); flex-direction:column; align-items:center; justify-content:center; padding:24px;">
   <div style="width:100%; max-width:380px;">
     <div style="text-align:center; margin-bottom:32px;">
-      <div style="font-size:48px; margin-bottom:8px;">🛒</div>
-      <div id="login-tienda-nombre" style="display:none; font-family:var(--ff-disp); font-size:22px; font-weight:800; color:var(--text); margin-bottom:2px;"></div>
-      <div style="font-family:var(--ff-disp); font-size:14px; font-weight:600; letter-spacing:.06em; color:var(--text-2); text-transform:uppercase;">AESSPOS</div>
-      <div style="font-size:13px; color:var(--text-2); margin-top:4px;">Sistema de Punto de Venta</div>
+      <!-- Logo AESSPOS -->
+      <div style="display:flex; justify-content:center; margin-bottom:14px;">
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 198 52" fill="none" width="198" height="52" role="img" aria-label="AESSPOS">
+          <!-- Badge -->
+          <rect width="52" height="52" rx="13" fill="#F59E0B"/>
+          <!-- Store rooftop (A-shape) -->
+          <path d="M10 28L26 12L42 28" stroke="white" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round"/>
+          <!-- Store body -->
+          <rect x="13" y="27" width="26" height="16" rx="2" fill="white"/>
+          <!-- Door -->
+          <rect x="20" y="33" width="12" height="10" rx="2" fill="#F59E0B"/>
+          <!-- Wordmark -->
+          <text x="63" y="37" font-family="'Barlow Condensed', 'Barlow', system-ui, sans-serif" font-weight="800" font-size="32" letter-spacing="1" fill="currentColor">AESS<tspan fill="#F59E0B">POS</tspan></text>
+        </svg>
+      </div>
+      <div id="login-tienda-nombre" style="display:none; font-family:var(--ff-disp); font-size:20px; font-weight:700; color:var(--text); margin-bottom:2px;"></div>
+      <div style="font-size:13px; color:var(--text-2);">Sistema de Punto de Venta</div>
     </div>
 
     <!-- Formulario usuario/contraseña -->
