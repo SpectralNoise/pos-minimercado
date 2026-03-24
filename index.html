@@ -18,23 +18,23 @@
 
 /* ── TEMA CLARO (default) ──────────────────── */
 :root {
-  /* Paleta cálida inspirada en papel de recibo y billetes colombianos */
+  /* Paleta cálida — ámbar AESSPOS sobre papel de recibo */
   --bg:        #f0ece3;          /* papel cálido */
   --surf-1:    #faf8f4;          /* blanco recibo */
   --surf-2:    #ede8de;          /* mostrador */
   --surf-3:    #e0d9ce;          /* sombra cálida */
   --border:    rgba(100,80,50,.14);
   --border-hi: rgba(100,80,50,.35);
-  --accent:    #2a6200;          /* verde billete colombiano */
-  --accent-bg: rgba(42,98,0,.07);
-  --accent-brd:rgba(42,98,0,.20);
+  --accent:    #B45309;          /* ámbar oscuro — legible sobre fondo claro */
+  --accent-bg: rgba(180,83,9,.07);
+  --accent-brd:rgba(180,83,9,.22);
   --tag-bg:    #fffbf0;          /* etiqueta precio: fondo */
-  --tag-border:rgba(42,98,0,.18);
+  --tag-border:rgba(180,83,9,.18);
   --text:      #1a1410;          /* tinta cálida */
   --text-2:    #6b5f52;
   --text-3:    #b0a496;
   --success:   #166534;
-  --warn:      #92400e;
+  --warn:      #c2410c;          /* naranja — distinto del ámbar de acento */
   --danger:    #991b1b;
   --info:      #1e40af;
   --purple:    #5b21b6;
@@ -58,15 +58,15 @@
   --border:    #2c2c34;
   --border-hi: #3e3e4a;
   --tag-bg:    #16161a;
-  --tag-border:#2c2c34;
-  --accent:    #c8f135;
-  --accent-bg: rgba(200,241,53,.10);
-  --accent-brd:rgba(200,241,53,.25);
+  --tag-border:#3a2e1a;
+  --accent:    #F59E0B;          /* ámbar AESSPOS */
+  --accent-bg: rgba(245,158,11,.12);
+  --accent-brd:rgba(245,158,11,.30);
   --text:      #ededea;
   --text-2:    #9898a3;
   --text-3:    #4a4a55;
   --success:   #22c55e;
-  --warn:      #f59e0b;
+  --warn:      #fb923c;          /* naranja — distinto del ámbar de acento */
   --danger:    #ef4444;
   --info:      #38bdf8;
   --purple:    #a78bfa;
@@ -189,7 +189,7 @@ nav#topnav {
   width: 36px; height: 36px; border-radius: 10px;
   background: var(--accent); display: flex; align-items: center; justify-content: center;
   font-size: 18px; flex-shrink: 0;
-  box-shadow: 0 2px 8px rgba(42,98,0,.25);
+  box-shadow: 0 2px 8px rgba(180,83,9,.25);
 }
 .nav-brand .brand-name {
   font-family: var(--ff-disp); font-weight: 900; font-size: 22px;
@@ -297,7 +297,7 @@ nav#topnav {
   border-bottom-left-radius: 6px;
 }
 .prod-card:hover {
-  border-color: var(--accent-brd); background: #fffdf5;
+  border-color: var(--accent-brd); background: var(--tag-bg);
   transform: translateY(-2px);
   box-shadow: 0 4px 12px rgba(0,0,0,.1), 0 0 0 1px rgba(255,255,255,.7) inset;
 }
@@ -420,8 +420,8 @@ nav#topnav {
   justify-content: center; gap: 8px;
 }
 .btn-pay:active { transform: scale(.96); }
-.btn-efectivo { background: var(--accent); color: #fff; box-shadow: 0 3px 10px rgba(42,98,0,.25); }
-.btn-efectivo:hover { filter: brightness(1.08); box-shadow: 0 4px 14px rgba(42,98,0,.32); }
+.btn-efectivo { background: var(--accent); color: #fff; box-shadow: 0 3px 10px rgba(180,83,9,.25); }
+.btn-efectivo:hover { filter: brightness(1.08); box-shadow: 0 4px 14px rgba(180,83,9,.32); }
 .btn-transf { background: var(--surf-2); color: var(--text); border: 1px solid var(--border); }
 .btn-transf:hover { border-color: var(--purple); color: var(--purple); background: rgba(91,33,182,.04); }
 
@@ -457,7 +457,7 @@ nav#topnav {
   letter-spacing: .05em; text-transform: uppercase;
   border-radius: var(--r-md); cursor: pointer; transition: filter var(--trans);
   display: flex; align-items: center; gap: 6px; flex-shrink: 0;
-  box-shadow: 0 2px 8px rgba(42,98,0,.2);
+  box-shadow: 0 2px 8px rgba(180,83,9,.25);
 }
 .btn-primary:hover { filter: brightness(1.08); }
 .btn-secondary {
