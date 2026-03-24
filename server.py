@@ -291,6 +291,13 @@ def init_db():
     except (sqlite3.OperationalError, ValueError) as e:
         if "duplicate column name" not in str(e):
             raise
+    # Migración: precio de compra en productos (para margen de ganancia)
+    try:
+        conn.execute("ALTER TABLE productos ADD COLUMN precio_compra REAL DEFAULT NULL")
+        conn.commit()
+    except (sqlite3.OperationalError, ValueError) as e:
+        if "duplicate column name" not in str(e):
+            raise
     # Migración: reasignar productos/ventas sin tienda_id a la primera tienda (datos pre-multitienda)
     primera = conn.execute("SELECT id FROM tiendas ORDER BY id LIMIT 1").fetchone()
     if primera:
@@ -393,6 +400,26 @@ class Handler(BaseHTTPRequestHandler):
             return AuthContext(int(user_id_s), tienda_id, rol)
         except Exception:
             self.send_error_json("Token inválido", 401); return None
+
+    def _tienda_is_pro(self, tienda_id):
+        """Consulta la DB y retorna True si la tienda tiene plan 'pro'."""
+        if tienda_id is None:
+            return False
+        conn = get_db()
+        try:
+            t = conn.execute("SELECT plan FROM tiendas WHERE id=?", (tienda_id,)).fetchone()
+            return bool(t and t["plan"] == "pro")
+        finally:
+            conn.close()
+
+    def require_pro(self, ctx):
+        """Verifica que la tienda tenga plan 'pro'. Superadmin siempre pasa.
+        Retorna True si tiene acceso, False si envió error 403."""
+        if ctx.rol == 'superadmin':
+            return True
+        if not self._tienda_is_pro(ctx.tienda_id):
+            self.send_error_json("Esta función requiere el plan Pro", 403); return False
+        return True
 
     def _make_partial_token(self, user_id):
         """Token de 5 min para el paso de 2FA."""
@@ -818,16 +845,57 @@ class Handler(BaseHTTPRequestHandler):
             try:
                 if ctx.rol == 'superadmin':
                     rows = conn.execute(
-                        "SELECT id,emoji,name,barcode,cat,price,stock,alert,thumbnail "
+                        "SELECT id,emoji,name,barcode,cat,price,precio_compra,stock,alert,"
+                        "(thumbnail IS NOT NULL AND thumbnail != '') AS has_thumbnail "
                         "FROM productos ORDER BY name"
                     ).fetchall()
                 else:
                     rows = conn.execute(
-                        "SELECT id,emoji,name,barcode,cat,price,stock,alert,thumbnail "
+                        "SELECT id,emoji,name,barcode,cat,price,precio_compra,stock,alert,"
+                        "(thumbnail IS NOT NULL AND thumbnail != '') AS has_thumbnail "
                         "FROM productos WHERE tienda_id=? ORDER BY name",
                         (ctx.tienda_id,)
                     ).fetchall()
                 self.send_json([row_to_dict(r) for r in rows])
+            finally:
+                conn.close()
+        elif path == "/api/productos/thumbnails":
+            # Carga batch de thumbnails — opcionalmente filtrada por ?ids=1,2,3
+            ctx = self.require_auth()
+            if not ctx: return
+            # Parsear ids opcionales del query string
+            qs = urllib.parse.urlparse(self.path).query
+            params = urllib.parse.parse_qs(qs)
+            ids_param = params.get("ids", [None])[0]
+            id_list = [int(x) for x in ids_param.split(",") if x.strip().isdigit()] if ids_param else None
+            conn = get_db()
+            try:
+                if id_list is not None:
+                    placeholders = ",".join("?" * len(id_list))
+                    if ctx.rol == 'superadmin':
+                        rows = conn.execute(
+                            f"SELECT id, thumbnail FROM productos "
+                            f"WHERE id IN ({placeholders}) AND thumbnail IS NOT NULL AND thumbnail != ''",
+                            id_list
+                        ).fetchall()
+                    else:
+                        rows = conn.execute(
+                            f"SELECT id, thumbnail FROM productos "
+                            f"WHERE id IN ({placeholders}) AND tienda_id=? AND thumbnail IS NOT NULL AND thumbnail != ''",
+                            id_list + [ctx.tienda_id]
+                        ).fetchall()
+                elif ctx.rol == 'superadmin':
+                    rows = conn.execute(
+                        "SELECT id, thumbnail FROM productos "
+                        "WHERE thumbnail IS NOT NULL AND thumbnail != '' ORDER BY id"
+                    ).fetchall()
+                else:
+                    rows = conn.execute(
+                        "SELECT id, thumbnail FROM productos "
+                        "WHERE tienda_id=? AND thumbnail IS NOT NULL AND thumbnail != '' ORDER BY id",
+                        (ctx.tienda_id,)
+                    ).fetchall()
+                self.send_json({str(r["id"]): r["thumbnail"] for r in rows})
             finally:
                 conn.close()
         elif path.startswith("/api/productos/") and path.endswith("/thumbnail"):
@@ -875,7 +943,28 @@ class Handler(BaseHTTPRequestHandler):
             ctx = self.require_auth()
             if not ctx: return
             barcode = path.split("/api/lookup-barcode/")[1]
-            self._lookup_barcode(barcode)
+            self._lookup_barcode(barcode, ctx)
+        elif path == "/api/admin/diagnostico":
+            ctx = self.require_auth()
+            if not ctx: return
+            if ctx.rol != 'superadmin':
+                self.send_error_json("Solo superadmin", 403); return
+            conn = get_db()
+            try:
+                tiendas = conn.execute("SELECT id, nombre, plan FROM tiendas ORDER BY id").fetchall()
+                result = []
+                for t in tiendas:
+                    cnt = conn.execute(
+                        "SELECT COUNT(*) FROM productos WHERE tienda_id=?", (t["id"],)
+                    ).fetchone()[0]
+                    null_cnt = conn.execute(
+                        "SELECT COUNT(*) FROM productos WHERE tienda_id IS NULL"
+                    ).fetchone()[0]
+                    result.append({"id": t["id"], "nombre": t["nombre"], "plan": t["plan"],
+                                   "productos": cnt, "sin_tienda": null_cnt})
+                self.send_json({"tiendas": result})
+            finally:
+                conn.close()
         elif path == "/api/turnos/activo":
             self._get_turno_activo()
         elif path == "/api/turnos":
@@ -949,15 +1038,54 @@ class Handler(BaseHTTPRequestHandler):
         elif self.path == "/analyze-product":
             ctx = self.require_auth()
             if not ctx: return
+            if not self.require_pro(ctx): return
             self._handle_analyze_product()
+        elif self.path == "/api/facturas/analizar":
+            ctx = self.require_auth()
+            if not ctx: return
+            if not self.require_pro(ctx): return
+            self._handle_analizar_factura(ctx)
+        elif self.path == "/api/facturas/aplicar":
+            ctx = self.require_auth()
+            if not ctx: return
+            if not self.require_pro(ctx): return
+            self._handle_aplicar_factura(ctx)
         elif self.path == "/api/ai-cierre":
             ctx = self.require_auth()
             if not ctx: return
+            if not self.require_pro(ctx): return
             self._handle_ai_cierre()
         elif self.path == "/api/ai-pedido":
             ctx = self.require_auth()
             if not ctx: return
+            if not self.require_pro(ctx): return
             self._handle_ai_pedido()
+        elif self.path == "/api/admin/reasignar-productos":
+            ctx = self.require_auth()
+            if not ctx: return
+            if ctx.rol != 'superadmin':
+                self.send_error_json("Solo superadmin", 403); return
+            try:
+                body = self.read_json_body()
+                desde = body.get("desde_tienda_id")
+                hacia = int(body["hacia_tienda_id"])
+                conn = get_db()
+                try:
+                    if desde is None:
+                        # Reasignar productos sin tienda
+                        r = conn.execute(
+                            "UPDATE productos SET tienda_id=? WHERE tienda_id IS NULL", (hacia,)
+                        )
+                    else:
+                        r = conn.execute(
+                            "UPDATE productos SET tienda_id=? WHERE tienda_id=?", (hacia, int(desde))
+                        )
+                    conn.commit()
+                    self.send_json({"ok": True, "actualizados": r.rowcount})
+                finally:
+                    conn.close()
+            except Exception as e:
+                self.send_error_json(str(e), 500)
         elif self.path == "/api/turnos":
             self._open_turno()
         elif self.path == "/api/tiendas":
@@ -1065,14 +1193,15 @@ class Handler(BaseHTTPRequestHandler):
             conn = get_db()
             c = conn.cursor()
             c.execute(
-                "INSERT INTO productos (emoji,name,barcode,cat,price,stock,alert,thumbnail,tienda_id) VALUES (?,?,?,?,?,?,?,?,?)",
+                "INSERT INTO productos (emoji,name,barcode,cat,price,precio_compra,stock,alert,thumbnail,tienda_id) VALUES (?,?,?,?,?,?,?,?,?,?)",
                 (body.get("emoji","📦"), body["name"], body.get("barcode",""),
                  body.get("cat","General"), body.get("price",0),
+                 body.get("precio_compra") or None,
                  body.get("stock",0), body.get("alert",5),
                  self._compress_thumbnail(body.get("thumbnail")), tienda_id)
             )
             row = conn.execute(
-                "SELECT id,emoji,name,barcode,cat,price,stock,alert,thumbnail "
+                "SELECT id,emoji,name,barcode,cat,price,precio_compra,stock,alert,thumbnail "
                 "FROM productos WHERE id=?", (c.lastrowid,)
             ).fetchone()
             conn.commit(); conn.close()
@@ -1090,31 +1219,30 @@ class Handler(BaseHTTPRequestHandler):
             conn = get_db()
             tienda_filter = "" if ctx.rol == 'superadmin' else " AND tienda_id=?"
             tienda_params = () if ctx.rol == 'superadmin' else (ctx.tienda_id,)
+            pc = body.get("precio_compra") or None
             if "thumbnail" in body:
                 conn.execute(
-                    f"UPDATE productos SET emoji=?,name=?,barcode=?,cat=?,price=?,stock=?,alert=?,thumbnail=? WHERE id=?{tienda_filter}",
+                    f"UPDATE productos SET emoji=?,name=?,barcode=?,cat=?,price=?,precio_compra=?,stock=?,alert=?,thumbnail=? WHERE id=?{tienda_filter}",
                     (body.get("emoji","📦"), body["name"], body.get("barcode",""),
-                     body.get("cat","General"), body.get("price",0),
+                     body.get("cat","General"), body.get("price",0), pc,
                      body.get("stock",0), body.get("alert",5),
                      self._compress_thumbnail(body.get("thumbnail")), prod_id) + tienda_params
                 )
             else:
                 conn.execute(
-                    f"UPDATE productos SET emoji=?,name=?,barcode=?,cat=?,price=?,stock=?,alert=? WHERE id=?{tienda_filter}",
+                    f"UPDATE productos SET emoji=?,name=?,barcode=?,cat=?,price=?,precio_compra=?,stock=?,alert=? WHERE id=?{tienda_filter}",
                     (body.get("emoji","📦"), body["name"], body.get("barcode",""),
-                     body.get("cat","General"), body.get("price",0),
+                     body.get("cat","General"), body.get("price",0), pc,
                      body.get("stock",0), body.get("alert",5), prod_id) + tienda_params
                 )
             if tienda_params:  # non-superadmin: verificar que el producto pertenece a esta tienda
                 row = conn.execute(
-                    "SELECT id,emoji,name,barcode,cat,price,stock,alert,"
-                    "(thumbnail IS NOT NULL AND thumbnail != '') AS has_thumbnail "
+                    "SELECT id,emoji,name,barcode,cat,price,precio_compra,stock,alert,thumbnail "
                     "FROM productos WHERE id=? AND tienda_id=?", (prod_id, ctx.tienda_id)
                 ).fetchone()
             else:
                 row = conn.execute(
-                    "SELECT id,emoji,name,barcode,cat,price,stock,alert,"
-                    "(thumbnail IS NOT NULL AND thumbnail != '') AS has_thumbnail "
+                    "SELECT id,emoji,name,barcode,cat,price,precio_compra,stock,alert,thumbnail "
                     "FROM productos WHERE id=?", (prod_id,)
                 ).fetchone()
             conn.commit(); conn.close()
@@ -1181,6 +1309,164 @@ class Handler(BaseHTTPRequestHandler):
             self.send_error_json(str(e), 500)
 
     # ── ANÁLISIS IA ────────────────────────────────────────────────
+    # ── ANÁLISIS DE FACTURA DE PROVEEDOR CON IA ─────────────────────
+    def _handle_analizar_factura(self, ctx):
+        """Recibe imagen de factura, llama a Claude Vision, retorna items cruzados con inventario."""
+        if not AI_AVAILABLE:
+            self.send_error_json("SDK de Anthropic no instalado (pip3 install anthropic)"); return
+        if not ANTHROPIC_API_KEY:
+            self.send_error_json("ANTHROPIC_API_KEY no configurada"); return
+        try:
+            body       = self.read_json_body()
+            image_b64  = body.get("image")
+            media_type = body.get("mediaType", "image/jpeg")
+            if not image_b64:
+                self.send_error_json("Falta el campo 'image'"); return
+
+            prompt = """Eres un experto en facturas de proveedores colombianos de consumo masivo.
+
+Analiza CUIDADOSAMENTE esta imagen de factura y extrae TODOS los productos.
+
+Para cada producto devuelve:
+- "barcode": código de barras / código del producto (string, puede estar en columna "Código", "Cod Barra", etc.)
+- "name": nombre completo del producto tal como aparece en la factura
+- "qty": cantidad comprada (número entero — columna "Cant" o similar)
+- "price_unit": precio unitario final con IVA incluido (columna "P. Final", "P.U.A Iva", "Valor unitario" o similar)
+- "price_total": total de la línea (columna "Total" o "Valor total")
+
+Reglas importantes:
+1. El "price_unit" es el precio POR UNIDAD/CAJA comprada, NO el total de la línea
+2. Si "P. Final" o "P.U.A Iva" no está disponible, calcula: price_total / qty
+3. Los precios son en pesos colombianos, sin símbolo $, con puntos como separador de miles
+4. El barcode puede ser vacío string "" si no aparece código
+5. Extrae TODOS los productos visibles, sin omitir ninguno
+
+Responde ÚNICAMENTE con este JSON, sin texto adicional:
+{
+  "proveedor": "nombre del proveedor si es legible",
+  "fecha": "fecha de la factura si es visible",
+  "items": [
+    {"barcode": "7702117008216", "name": "ALMENDRA FRANCESA X 50GR ITALO", "qty": 4, "price_unit": 2677, "price_total": 10710},
+    ...
+  ]
+}"""
+
+            client  = anthropic.Anthropic(api_key=ANTHROPIC_API_KEY)
+            message = client.messages.create(
+                model="claude-sonnet-4-6",
+                max_tokens=2000,
+                messages=[{"role": "user", "content": [
+                    {"type": "image", "source": {"type": "base64", "media_type": media_type, "data": image_b64}},
+                    {"type": "text",  "text": prompt}
+                ]}],
+            )
+            raw = message.content[0].text.strip()
+            if raw.startswith("```"):
+                raw = raw.split("```")[1]
+                if raw.startswith("json"): raw = raw[4:]
+            factura = json.loads(raw.strip())
+            items   = factura.get("items", [])
+
+            # Cruzar con inventario de la tienda
+            conn = get_db()
+            try:
+                if ctx.rol == 'superadmin':
+                    rows = conn.execute(
+                        "SELECT id,name,barcode,price,stock,cat,emoji FROM productos ORDER BY name"
+                    ).fetchall()
+                else:
+                    rows = conn.execute(
+                        "SELECT id,name,barcode,price,stock,cat,emoji FROM productos "
+                        "WHERE tienda_id=? ORDER BY name", (ctx.tienda_id,)
+                    ).fetchall()
+            finally:
+                conn.close()
+
+            inv_by_barcode = {r["barcode"]: dict(r) for r in rows if r["barcode"]}
+            inv_by_id      = {r["id"]: dict(r) for r in rows}
+
+            enriched = []
+            for item in items:
+                bc = str(item.get("barcode","")).strip()
+                match = inv_by_barcode.get(bc)
+                enriched.append({
+                    "barcode":     bc,
+                    "name":        item.get("name",""),
+                    "qty":         int(item.get("qty") or 1),
+                    "price_unit":  float(item.get("price_unit") or 0),
+                    "price_total": float(item.get("price_total") or 0),
+                    "status":      "update" if match else "new",
+                    "prod_id":     match["id"] if match else None,
+                    "prod_name":   match["name"] if match else None,
+                    "stock_actual": match["stock"] if match else None,
+                    "precio_venta": match["price"] if match else None,
+                })
+
+            self.send_json({
+                "ok":       True,
+                "proveedor": factura.get("proveedor",""),
+                "fecha":    factura.get("fecha",""),
+                "items":    enriched,
+            })
+        except json.JSONDecodeError as e:
+            self.send_error_json(f"IA devolvió formato inesperado: {e}")
+        except Exception as e:
+            self.send_error_json(str(e), 500)
+
+    def _handle_aplicar_factura(self, ctx):
+        """Aplica los cambios de la factura al inventario: actualiza stock y crea productos nuevos."""
+        if ctx.rol not in ('admin', 'superadmin'):
+            self.send_error_json("Solo admin puede aplicar facturas", 403); return
+        try:
+            body  = self.read_json_body()
+            items = body.get("items", [])
+            conn  = get_db()
+            tienda_id = None if ctx.rol == 'superadmin' else ctx.tienda_id
+            creados    = 0
+            actualizados = 0
+            try:
+                for item in items:
+                    if not item.get("incluir", True):
+                        continue
+                    prod_id    = item.get("prod_id")
+                    qty        = int(item.get("qty") or 0)
+                    price_unit = float(item.get("price_unit") or 0)
+                    if item.get("status") == "update" and prod_id:
+                        # Actualizar stock y precio de compra
+                        conn.execute(
+                            "UPDATE productos SET stock = stock + ?, precio_compra = ? WHERE id = ?",
+                            (qty, price_unit if price_unit > 0 else None, prod_id)
+                        )
+                        actualizados += 1
+                    elif item.get("status") == "new":
+                        name = item.get("name","").strip()[:120]
+                        if not name: continue
+                        bc  = str(item.get("barcode","")).strip()[:60]
+                        cat = item.get("cat","Otro") or "Otro"
+                        emoji = item.get("emoji","📦") or "📦"
+                        # Precio de venta sugerido: compra + 30%
+                        precio_venta = round(price_unit * 1.30) if price_unit > 0 else 0
+                        conn.execute(
+                            "INSERT INTO productos "
+                            "(emoji,name,barcode,cat,price,precio_compra,stock,alert,tienda_id) "
+                            "VALUES (?,?,?,?,?,?,?,?,?)",
+                            (emoji, name, bc, cat, precio_venta,
+                             price_unit if price_unit > 0 else None,
+                             qty, 5, tienda_id)
+                        )
+                        creados += 1
+                conn.commit()
+            finally:
+                conn.close()
+            self.send_json({
+                "ok": True,
+                "actualizados": actualizados,
+                "creados": creados,
+                "msg": f"✅ {actualizados} productos actualizados, {creados} creados"
+            })
+        except Exception as e:
+            self.send_error_json(str(e), 500)
+
     def _handle_analyze_product(self):
         if not AI_AVAILABLE:
             self.send_error_json("SDK de Anthropic no instalado"); return
@@ -1417,7 +1703,9 @@ Al final, un consejo breve sobre los productos sin rotación."""
             self.send_error_json(str(e), 500)
 
     # ── LOOKUP BARCODE (Open Food Facts) ───────────────────────────
-    def _lookup_barcode(self, barcode):
+    def _lookup_barcode(self, barcode, ctx=None):
+        # MercadoLibre (precios sugeridos) solo para plan Pro
+        is_pro = ctx is None or ctx.rol == 'superadmin' or self._tienda_is_pro(ctx.tienda_id)
         OFF_CATS = {
             'en:beverages':'Bebidas','en:drinks':'Bebidas','en:sodas':'Bebidas',
             'en:waters':'Bebidas','en:juices':'Bebidas','en:coffees':'Bebidas',
@@ -1448,7 +1736,14 @@ Al final, un consejo breve sobre los productos sin rotación."""
                 data = json.loads(r.read())
 
             if data.get("status") != 1:
-                self.send_json({"found": False}); return
+                # OpenFoodFacts no encontró el producto; MercadoLibre solo en plan Pro
+                if is_pro:
+                    meli  = self._meli_lookup(barcode)
+                    ps    = {k: meli[k] for k in ("min","max","medio","n")} if meli else None
+                    thumb = meli.get("thumbnail") if meli else None
+                else:
+                    ps = None; thumb = None
+                self.send_json({"found": False, "precio_sugerido": ps, "thumbnail": thumb}); return
 
             p = data["product"]
             name = (p.get("product_name_es") or p.get("product_name") or "").strip()
@@ -1483,12 +1778,13 @@ Al final, un consejo breve sobre los productos sin rotación."""
                 except Exception:
                     pass
 
-            # Mercado Libre: precio + imagen real
-            meli = self._meli_lookup(name or barcode)
-            precio_sugerido = {k: meli[k] for k in ("min","max","medio","n")} if meli else None
-            # Preferir imagen de MELI (foto real) sobre la de Open Food Facts
-            if meli and meli.get("thumbnail"):
-                thumbnail = meli["thumbnail"]
+            # Mercado Libre: precio + imagen real (solo plan Pro)
+            precio_sugerido = None
+            if is_pro:
+                meli = self._meli_lookup(name or barcode)
+                precio_sugerido = {k: meli[k] for k in ("min","max","medio","n")} if meli else None
+                if meli and meli.get("thumbnail"):
+                    thumbnail = meli["thumbnail"]
 
             self.send_json({
                 "found": True,

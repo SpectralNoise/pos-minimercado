@@ -271,60 +271,47 @@ nav#topnav {
 .pill:hover { border-color: var(--border-hi); color: var(--text); }
 .pill.active { background: var(--accent-bg); border-color: var(--accent-brd); color: var(--accent); }
 
+/* ─── GRILLA DE PRODUCTOS ─────────────────────────────────── */
 .products-grid {
-  flex: 1; overflow-y: auto; padding: 14px 18px;
-  display: grid; grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); gap: 10px;
-  align-content: start; background: var(--bg);
+  flex: 1; overflow-y: auto; padding: 12px 16px;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+  max-width: 100%;
+  gap: 10px;
+  align-content: start;
+  background: var(--bg);
+  contain: layout;
 }
 .products-grid::-webkit-scrollbar { width: 4px; }
 .products-grid::-webkit-scrollbar-track { background: transparent; }
 .products-grid::-webkit-scrollbar-thumb { background: var(--border); border-radius: 99px; }
 
-/* ── FIRMA: Tarjeta de precio (etiqueta de góndola) ── */
+/* ── TARJETA DE PRODUCTO (vertical: imagen arriba, nombre abajo) ── */
 .prod-card {
   background: var(--tag-bg); border: 1px solid var(--tag-border);
-  border-radius: var(--r-md); padding: 14px 12px 12px; cursor: pointer;
-  transition: all var(--trans); position: relative; overflow: hidden;
-  display: flex; flex-direction: column; gap: 5px;
+  border-radius: var(--r-md);
+  cursor: pointer; transition: all var(--trans);
+  position: relative; overflow: hidden;
+  display: flex; flex-direction: column; align-items: center;
+  padding: 12px 10px 10px; gap: 6px;
   -webkit-tap-highlight-color: transparent;
   box-shadow: 0 1px 3px rgba(0,0,0,.07), 0 0 0 1px rgba(255,255,255,.6) inset;
 }
-/* Esquina plegada — detalle de etiqueta de precio */
+/* Esquina plegada */
 .prod-card::before {
   content: ''; position: absolute; top: 0; right: 0;
-  width: 18px; height: 18px;
+  width: 16px; height: 16px;
   background: linear-gradient(225deg, var(--bg) 50%, transparent 50%);
-  border-bottom-left-radius: 6px;
+  border-bottom-left-radius: 5px;
 }
 .prod-card:hover {
-  border-color: var(--accent-brd); background: var(--tag-bg);
+  border-color: var(--accent-brd);
   transform: translateY(-2px);
-  box-shadow: 0 4px 12px rgba(0,0,0,.1), 0 0 0 1px rgba(255,255,255,.7) inset;
+  box-shadow: 0 4px 14px rgba(0,0,0,.1), 0 0 0 1px rgba(255,255,255,.7) inset;
 }
 .prod-card:active { transform: scale(.97); }
 .prod-card.out { opacity: .35; pointer-events: none; }
-.prod-card .prod-emoji { font-size: 26px; margin-bottom: 2px; }
-.prod-card .prod-name {
-  font-family: var(--ff-disp); font-size: 16px; font-weight: 700;
-  line-height: 1.15; color: var(--text);
-}
-.prod-card .prod-price {
-  font-family: var(--ff-mono); font-size: 18px; font-weight: 700;
-  color: var(--accent); margin-top: auto; padding-top: 6px;
-  border-top: 1px dashed var(--border);
-}
-.prod-card .prod-stock {
-  font-size: 11px; color: var(--text-3); font-family: var(--ff-mono);
-}
-.prod-card .prod-stock.low { color: var(--warn); font-weight: 600; }
-.prod-card .prod-stock.out-txt { color: var(--danger); font-weight: 600; }
-/* prod-info-col: en desktop es transparente (el flex-col del card maneja el layout) */
-.prod-card .prod-info-col { display: contents; }
-/* Miniatura de producto */
-.prod-card .prod-thumb {
-  width: 48px; height: 48px; object-fit: contain;
-  border-radius: 6px; margin-bottom: 2px; flex-shrink: 0;
-}
+/* Overlay "+ al carrito" */
 .prod-card::after {
   content: '+'; position: absolute; inset: 0;
   display: flex; align-items: center; justify-content: center;
@@ -333,6 +320,43 @@ nav#topnav {
   border-radius: var(--r-md);
 }
 .prod-card:hover::after { opacity: 1; }
+/* Imagen / emoji — área cuadrada centrada */
+.prod-card .prod-thumb-wrap {
+  width: 88px; height: 88px; flex-shrink: 0;
+  display: flex; align-items: center; justify-content: center;
+  position: relative;
+}
+.prod-card .prod-thumb {
+  max-width: 88px; max-height: 88px; width: 100%; height: 100%;
+  object-fit: contain; border-radius: 6px;
+  transition: opacity .3s;
+}
+.prod-card .prod-emoji {
+  font-size: 44px; line-height: 1;
+  width: 88px; height: 88px;
+  display: flex; align-items: center; justify-content: center;
+}
+.prod-card .prod-info-col {
+  display: contents;
+}
+.prod-card .prod-name {
+  font-family: var(--ff-disp); font-size: 12px; font-weight: 700;
+  line-height: 1.3; color: var(--text); text-align: center;
+  display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical;
+  overflow: hidden; width: 100%;
+}
+.prod-card .prod-price {
+  font-family: var(--ff-mono); font-size: 15px; font-weight: 700;
+  color: var(--accent); margin-top: auto;
+  padding-top: 5px; border-top: 1px dashed var(--border);
+  width: 100%; text-align: center;
+}
+.prod-card .prod-stock {
+  font-size: 10px; color: var(--text-3); font-family: var(--ff-mono);
+  text-align: center;
+}
+.prod-card .prod-stock.low { color: var(--warn); font-weight: 600; }
+.prod-card .prod-stock.out-txt { color: var(--danger); font-weight: 600; }
 
 /* Right: cart */
 .cobro-right {
@@ -431,7 +455,8 @@ nav#topnav {
 #screen-inventario { flex-direction: column; }
 .inv-toolbar {
   padding: 16px 24px; border-bottom: 1px solid var(--border);
-  display: flex; align-items: center; gap: 12px; flex-shrink: 0;
+  display: flex; align-items: center; gap: 10px; flex-shrink: 0;
+  flex-wrap: wrap;
 }
 .page-title {
   font-family: var(--ff-disp); font-size: 30px; font-weight: 900;
@@ -946,22 +971,17 @@ table.inv-table {
   .pill { padding: 4px 11px; font-size: 12px; }
   .products-grid {
     grid-template-columns: repeat(2, 1fr);
-    gap: 8px; padding: 8px 12px;
+    gap: 8px; padding: 8px 10px;
   }
   .prod-card {
-    padding: 10px 10px 9px;
-    display: flex; flex-direction: row; align-items: center; gap: 8px;
+    padding: 10px 8px 9px; gap: 5px;
   }
-  .prod-card .prod-emoji { font-size: 24px; flex-shrink: 0; margin-bottom: 0; }
-  .prod-card .prod-info-col {
-    display: flex; flex-direction: column; gap: 1px; flex: 1; min-width: 0;
-  }
-  .prod-card .prod-name {
-    font-size: 13px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
-  }
-  .prod-card .prod-price {
-    font-size: 14px; margin-top: 0; padding-top: 0; border-top: none;
-  }
+  .prod-card .prod-thumb-wrap,
+  .prod-card .prod-emoji { width: 68px; height: 68px; }
+  .prod-card .prod-emoji { font-size: 34px; }
+  .prod-card .prod-thumb { max-width: 68px; max-height: 68px; }
+  .prod-card .prod-name { font-size: 11px; }
+  .prod-card .prod-price { font-size: 13px; }
   .prod-card .prod-stock { font-size: 10px; }
 
   /* CARRITO */
@@ -1236,6 +1256,7 @@ table.inv-table {
         <input type="text" id="inv-search" placeholder="Buscar producto..." autocomplete="off">
       </div>
       <button class="btn-secondary" onclick="exportCSV()">⬇ CSV</button>
+      <button class="btn-secondary" id="btn-importar-factura" onclick="abrirModalFactura()" title="Importar factura de proveedor con IA (Plan Pro)">📄 Importar factura</button>
       <button class="btn-secondary" id="btn-pedido" onclick="generarPedido()" title="IA sugiere qué pedir esta semana">🛒 ¿Qué pedir?</button>
       <button class="btn-secondary" id="btn-refresh-inv" onclick="recargarInventario()" title="Actualizar inventario">🔄</button>
       <button class="btn-primary" onclick="openProdModal()">+ Nuevo</button>
@@ -1270,6 +1291,7 @@ table.inv-table {
             <th>Producto</th>
             <th>Categoría</th>
             <th class="right">Precio venta</th>
+            <th class="right">Margen</th>
             <th class="right">Stock</th>
             <th class="right">Días</th>
             <th class="right">Acciones</th>
@@ -1310,6 +1332,11 @@ table.inv-table {
         <div class="kpi-label">Transferencias</div>
         <div class="kpi-value" id="kpi-transf">$0</div>
         <div class="kpi-sub" id="kpi-tr-pct">0% del total</div>
+      </div>
+      <div class="kpi-card" id="kpi-margen-card" style="display:none">
+        <div class="kpi-label">Ganancia estimada</div>
+        <div class="kpi-value" id="kpi-margen">$0</div>
+        <div class="kpi-sub" id="kpi-margen-pct">0% margen</div>
       </div>
     </div>
     <!-- Historial de turnos — solo admin -->
@@ -1463,7 +1490,12 @@ table.inv-table {
       <div class="form-row">
         <div class="form-group">
           <label>Precio venta ($)</label>
-          <input type="text" inputmode="numeric" class="form-input mono" id="prod-price" placeholder="0" oninput="fmtInput(this)">
+          <input type="text" inputmode="numeric" class="form-input mono" id="prod-price" placeholder="0" oninput="fmtInput(this); _updateMargenHint()">
+        </div>
+        <div class="form-group">
+          <label>Precio compra ($) <span style="font-size:11px;color:var(--text-3);font-weight:400">opcional</span></label>
+          <input type="text" inputmode="numeric" class="form-input mono" id="prod-precio-compra" placeholder="0" oninput="fmtInput(this); _updateMargenHint()">
+          <div id="margen-hint" style="font-size:12px;color:var(--text-3);margin-top:4px;display:none"></div>
         </div>
         <div class="form-group">
           <label>Stock actual</label>
@@ -1571,6 +1603,96 @@ table.inv-table {
     </div>
     <div style="padding:20px 24px">
       <div id="pedido-ia-texto" style="font-size:14px;line-height:1.7;color:var(--text);white-space:pre-wrap;min-height:80px"></div>
+    </div>
+  </div>
+</div>
+
+<!-- MODAL: UPGRADE A PRO -->
+<div class="modal-overlay" id="modal-upgrade">
+  <div class="modal" style="max-width:420px;text-align:center">
+    <div style="padding:32px 28px 24px">
+      <div style="font-size:40px;margin-bottom:12px">⚡</div>
+      <h2 style="font-family:var(--ff-disp);font-size:22px;font-weight:800;margin-bottom:8px">Función exclusiva Pro</h2>
+      <p style="color:var(--text-2);font-size:14px;margin-bottom:6px">
+        <strong id="upgrade-feature-name"></strong> solo está disponible en el plan Pro.
+      </p>
+      <p style="color:var(--text-3);font-size:13px;margin-bottom:24px">
+        Contacta al administrador de tu cuenta para actualizar el plan de tu tienda.
+      </p>
+      <div style="background:var(--surf-2);border:1px solid var(--border);border-radius:12px;padding:16px 20px;text-align:left;margin-bottom:24px">
+        <div style="font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:var(--text-3);margin-bottom:10px">Plan Pro incluye</div>
+        <div style="font-size:13px;color:var(--text);line-height:2">
+          ✅ Importar facturas con IA<br>
+          ✅ Análisis de fotos de productos<br>
+          ✅ Sugerencias de pedido con IA<br>
+          ✅ Resumen IA al cerrar caja<br>
+          ✅ Precios sugeridos de MercadoLibre<br>
+          ✅ Reportes hasta 90 días<br>
+          ✅ Usuarios ilimitados
+        </div>
+      </div>
+      <button class="btn-primary" onclick="closeModal('modal-upgrade')" style="width:100%">Entendido</button>
+    </div>
+  </div>
+</div>
+
+<!-- MODAL: IMPORTAR FACTURA IA -->
+<div class="modal-overlay" id="modal-factura">
+  <div class="modal" style="max-width:720px;max-height:90vh;display:flex;flex-direction:column">
+    <div class="modal-header">
+      <h2>📄 Importar factura de proveedor</h2>
+      <button class="btn-close" onclick="closeModal('modal-factura')">✕</button>
+    </div>
+    <div style="padding:20px 24px;overflow-y:auto;flex:1">
+
+      <!-- STEP 1: Upload -->
+      <div id="factura-step-upload">
+        <p style="font-size:13px;color:var(--text-2);margin-bottom:16px">
+          Sube una foto de la factura del proveedor. La IA extrae los productos, cantidades y precios.<br>
+          <strong>Productos existentes</strong> → se actualiza el stock. <strong>Productos nuevos</strong> → se crean automáticamente.
+        </p>
+        <div class="photo-zone" id="factura-zone" onclick="document.getElementById('factura-img-input').click()" style="height:140px">
+          <input type="file" id="factura-img-input" accept="image/*" capture="environment" style="display:none" onchange="onFacturaImageSelected(event)">
+          <div class="ph-icon">📷</div>
+          <div class="ph-label">Foto o archivo de la factura</div>
+          <div class="ph-sub">JPG, PNG, HEIC — hasta 5 MB</div>
+        </div>
+        <div id="factura-preview-wrap" style="display:none;margin-top:12px">
+          <img id="factura-preview-img" style="max-height:200px;border-radius:8px;border:1px solid var(--border);display:block">
+          <button class="btn-primary" id="btn-analizar-factura" onclick="analizarFactura()" style="margin-top:12px;width:100%">
+            ✨ Analizar con IA
+          </button>
+        </div>
+      </div>
+
+      <!-- STEP 2: Review -->
+      <div id="factura-step-review" style="display:none">
+        <div id="factura-meta" style="font-size:13px;color:var(--text-2);margin-bottom:14px;padding:10px 14px;background:var(--surf-2);border-radius:8px;border:1px solid var(--border)"></div>
+        <div style="font-size:12px;color:var(--text-3);margin-bottom:8px">
+          Revisa y ajusta antes de aplicar. Desmarca los productos que no quieras importar.
+        </div>
+        <div style="overflow-x:auto">
+          <table style="width:100%;border-collapse:collapse;font-size:13px" id="factura-items-table">
+            <thead>
+              <tr style="border-bottom:2px solid var(--border);text-align:left">
+                <th style="padding:8px 6px;color:var(--text-3);font-weight:600;width:32px"></th>
+                <th style="padding:8px 6px;color:var(--text-3);font-weight:600">Producto (factura)</th>
+                <th style="padding:8px 6px;color:var(--text-3);font-weight:600;width:70px">Cant</th>
+                <th style="padding:8px 6px;color:var(--text-3);font-weight:600;width:100px">P. Compra</th>
+                <th style="padding:8px 6px;color:var(--text-3);font-weight:600">Estado</th>
+              </tr>
+            </thead>
+            <tbody id="factura-items-body"></tbody>
+          </table>
+        </div>
+        <div style="margin-top:16px;display:flex;gap:10px;justify-content:flex-end">
+          <button class="btn-secondary" onclick="resetModalFactura()">← Otra factura</button>
+          <button class="btn-primary" id="btn-aplicar-factura" onclick="aplicarFactura()">✅ Aplicar cambios</button>
+        </div>
+      </div>
+
+      <!-- Estado de análisis -->
+      <div id="factura-status" style="display:none;text-align:center;padding:32px;color:var(--text-2);font-size:14px"></div>
     </div>
   </div>
 </div>
@@ -1723,6 +1845,40 @@ table.inv-table {
 // ─── AUTH ──────────────────────────────────────
 let currentUser = null;
 // { id, nombre, username, rol, tienda_id } — tienda_id === null para superadmin
+
+// ─── PLAN GATING ──────────────────────────────────────────────────────────
+function isPro() {
+  if (!currentUser) return false;
+  if (currentUser.rol === 'superadmin') return true; // superadmin accede a todo
+  return (currentUser.tienda?.plan || 'basico') === 'pro';
+}
+
+// Retorna true si puede continuar. Si no, muestra el modal de upgrade.
+function requirePro(featureName) {
+  if (isPro()) return true;
+  document.getElementById('upgrade-feature-name').textContent = featureName;
+  document.getElementById('modal-upgrade').classList.add('open');
+  return false;
+}
+
+// Actualiza la UI de botones Pro: añade badge ⚡ si la tienda no es Pro
+function _actualizarBotonesProUI() {
+  const pro = isPro();
+  const btn = document.getElementById('btn-importar-factura');
+  if (!btn) return;
+  if (!pro) {
+    btn.innerHTML = '📄 Importar factura <span style="font-size:10px;background:var(--accent);color:#fff;border-radius:4px;padding:1px 5px;margin-left:4px;vertical-align:middle">PRO</span>';
+    btn.title = 'Requiere plan Pro';
+  } else {
+    btn.innerHTML = '📄 Importar factura';
+    btn.title = 'Importar factura de proveedor con IA';
+  }
+  // Botón "¿Qué pedir?" también es Pro
+  const btnPedido = document.getElementById('btn-pedido');
+  if (btnPedido && !pro) {
+    btnPedido.innerHTML = '🛒 ¿Qué pedir? <span style="font-size:10px;background:var(--accent);color:#fff;border-radius:4px;padding:1px 5px;margin-left:4px;vertical-align:middle">PRO</span>';
+  }
+}
 
 async function apiFetch(url, options = {}) {
   const token = localStorage.getItem('aesspos_token');
@@ -1938,7 +2094,9 @@ async function loadData() {
       apiFetch('/api/turnos/activo')
     ]);
     if (!pRes || !vRes || !tRes) return; // sesión expirada
+    if (!pRes.ok) { showToast(`⚠ Error cargando inventario (${pRes.status})`); return; }
     products = await pRes.json();
+    if (!Array.isArray(products)) { showToast('⚠ Respuesta de inventario inválida'); products = []; }
     sales    = (await vRes.json()).map(normalizarVenta);
     const turnoActivo = await tRes.json();
     if (turnoActivo && turnoActivo.id) {
@@ -1951,9 +2109,60 @@ async function loadData() {
       };
       updateCajaBar();
     }
+    // Cargar thumbnails en background (no bloquea el render inicial)
+    _loadThumbnailsBackground();
   } catch (err) {
     showToast('⚠ Error cargando datos del servidor');
   }
+}
+
+// Lazy-load thumbnails using IntersectionObserver — only fetches visible products
+let _thumbObserver = null;
+const _thumbCache = {}; // prodId → dataUrl
+
+async function _loadThumbnailsBackground() {
+  // Collect IDs of products with thumbnails not yet loaded
+  const pending = products.filter(p => p.has_thumbnail && !p.thumbnail).map(p => p.id);
+  if (!pending.length) return;
+
+  // Disconnect previous observer
+  if (_thumbObserver) _thumbObserver.disconnect();
+
+  _thumbObserver = new IntersectionObserver(async (entries) => {
+    const visibleIds = [];
+    entries.forEach(entry => {
+      if (!entry.isIntersecting) return;
+      const el = entry.target;
+      const id = parseInt(el.dataset.lazy);
+      if (id && !_thumbCache[id]) visibleIds.push(id);
+      _thumbObserver.unobserve(el);
+    });
+    if (!visibleIds.length) return;
+
+    // Batch fetch only the visible ones
+    try {
+      const res = await apiFetch(`/api/productos/thumbnails?ids=${visibleIds.join(',')}`);
+      if (!res || !res.ok) return;
+      const thumbs = await res.json();
+      let changed = false;
+      Object.entries(thumbs).forEach(([id, url]) => {
+        _thumbCache[id] = url;
+        const prod = products.find(p => p.id == id);
+        if (prod) { prod.thumbnail = url; changed = true; }
+        // Update DOM directly — avoid full re-render
+        document.querySelectorAll(`[data-lazy="${id}"]`).forEach(wrap => {
+          wrap.innerHTML = `<img src="${url}" class="prod-thumb" alt="" loading="lazy">`;
+          delete wrap.dataset.lazy;
+        });
+      });
+    } catch (_) {}
+  }, { rootMargin: '300px 0px' });
+
+  // Observe all pending thumb-wrap elements
+  document.querySelectorAll('[data-lazy]').forEach(el => {
+    const id = parseInt(el.dataset.lazy);
+    if (pending.includes(id)) _thumbObserver.observe(el);
+  });
 }
 
 // ─── UTILS ────────────────────────────────────
@@ -2045,17 +2254,26 @@ function renderProducts() {
   });
   const grid = document.getElementById('products-grid');
   if (!filtered.length) {
-    grid.innerHTML = `<div style="grid-column:1/-1;text-align:center;padding:40px;color:var(--text-3);font-family:var(--ff-disp);font-size:18px;text-transform:uppercase;letter-spacing:.05em">Sin resultados</div>`;
+    const msg = products.length === 0
+      ? `<div style="grid-column:1/-1;text-align:center;padding:60px 24px;color:var(--text-3)">
+           <div style="font-size:40px;margin-bottom:12px">📦</div>
+           <div style="font-family:var(--ff-disp);font-size:18px;text-transform:uppercase;letter-spacing:.05em;margin-bottom:8px">Sin inventario</div>
+           <div style="font-size:13px">Agrega productos desde el panel Admin → Inventario</div>
+         </div>`
+      : `<div style="grid-column:1/-1;text-align:center;padding:40px;color:var(--text-3);font-family:var(--ff-disp);font-size:18px;text-transform:uppercase;letter-spacing:.05em">Sin resultados</div>`;
+    grid.innerHTML = msg;
     return;
   }
   grid.innerHTML = filtered.map(p => {
     const stockClass = p.stock === 0 ? 'out-txt' : p.stock <= p.alert ? 'low' : '';
     const stockTxt = p.stock === 0 ? 'Sin stock' : `Stock: ${p.stock}`;
-    const thumb = p.thumbnail
-      ? `<img src="${p.thumbnail}" class="prod-thumb" alt="" loading="lazy">`
-      : `<div class="prod-emoji">${esc(p.emoji)}</div>`;
+    const thumbArea = p.thumbnail
+      ? `<div class="prod-thumb-wrap"><img src="${p.thumbnail}" class="prod-thumb" alt="" loading="lazy"></div>`
+      : (p.has_thumbnail
+          ? `<div class="prod-thumb-wrap" data-lazy="${p.id}"><div class="prod-emoji">${esc(p.emoji)}</div></div>`
+          : `<div class="prod-emoji">${esc(p.emoji)}</div>`);
     return `<div class="prod-card ${p.stock===0?'out':''}" onclick="addToCart(${p.id})">
-      ${thumb}
+      ${thumbArea}
       <div class="prod-info-col">
         <div class="prod-name">${esc(p.name)}</div>
         <div class="prod-price">${fmt(p.price)}</div>
@@ -2282,7 +2500,23 @@ async function lookupFillModal(barcode) {
     if (!res) return;
     const data = await res.json();
     if (!data.found) {
-      if (status) status.textContent = '';
+      // Aún podría traer precio sugerido e imagen desde MercadoLibre
+      if (data.precio_sugerido) {
+        _applyMeliPrice(data.precio_sugerido);
+        if (status) status.textContent = '💰 Precio sugerido de MercadoLibre';
+        showToast('💰 Producto no identificado — se sugiere precio por MercadoLibre');
+      } else {
+        if (status) status.textContent = '';
+      }
+      if (data.thumbnail) {
+        const parts = data.thumbnail.split(',');
+        currentMediaType = (parts[0].match(/:(.*?);/) || [])[1] || 'image/jpeg';
+        currentImageB64  = parts[1];
+        thumbnailChanged = true;
+        document.getElementById('photo-img').src = data.thumbnail;
+        document.getElementById('photo-preview').style.display = 'block';
+        document.getElementById('photo-zone').style.display    = 'none';
+      }
       document.getElementById('prod-name').focus();
       return;
     }
@@ -2311,7 +2545,7 @@ async function lookupFillModal(barcode) {
 }
 
 function _applyMeliPrice(ps) {
-  if (!ps) return;
+  if (!ps || !isPro()) return;
   const priceEl = document.getElementById('prod-price');
   if (!priceEl.value || priceEl.value === '0') setMoney('prod-price', ps.medio);
   let hint = document.getElementById('meli-price-hint');
@@ -2323,6 +2557,19 @@ function _applyMeliPrice(ps) {
   }
   const sugerido = Math.round(ps.medio * 1.30 / 100) * 100; // +30% margen, redondeado a $100
   hint.innerHTML = `📊 MELI: $${ps.min.toLocaleString('es-CO')} – $${ps.max.toLocaleString('es-CO')} · <strong>Sugerido +30%: $${sugerido.toLocaleString('es-CO')}</strong> <span style="color:var(--text-3)">(${ps.n} ofertas)</span>`;
+}
+
+function _updateMargenHint() {
+  const hint = document.getElementById('margen-hint');
+  if (!hint) return;
+  const venta  = parseMoney('prod-price');
+  const compra = parseMoney('prod-precio-compra');
+  if (!venta || !compra || compra <= 0) { hint.style.display = 'none'; return; }
+  const ganancia = venta - compra;
+  const margen   = ((ganancia / compra) * 100).toFixed(1);
+  const color    = ganancia >= 0 ? 'var(--success, #16a34a)' : 'var(--danger, #dc2626)';
+  hint.style.display = 'block';
+  hint.innerHTML = `Ganancia: <strong style="color:${color}">$${ganancia.toLocaleString('es-CO')}</strong> · Margen: <strong style="color:${color}">${margen}%</strong>`;
 }
 
 function _processScan(barcode) {
@@ -2478,6 +2725,7 @@ async function completarVenta() {
     const pRes = await apiFetch('/api/productos');
     if (!pRes) return;
     products = await pRes.json();
+    _loadThumbnailsBackground();
 
     lastSale = {
       id:       data.venta.id,
@@ -2664,6 +2912,7 @@ async function recargarInventario() {
     products = await res.json();
     renderInventario();
     showToast('✅ Inventario actualizado');
+    _loadThumbnailsBackground();
   } finally {
     if (btn) btn.disabled = false;
   }
@@ -2717,6 +2966,13 @@ function renderInventario() {
       </div></td>
       <td><span class="td-cat">${esc(p.cat)}</span></td>
       <td class="right"><span class="td-price">${fmt(p.price)}</span></td>
+      <td class="right" style="font-family:var(--ff-mono);font-size:13px">${(() => {
+        if (!p.precio_compra) return '<span style="color:var(--text-3)">—</span>';
+        const g = p.price - p.precio_compra;
+        const m = ((g / p.precio_compra) * 100).toFixed(0);
+        const c = g >= 0 ? 'var(--success,#16a34a)' : 'var(--danger,#dc2626)';
+        return `<span style="color:${c};font-weight:600">${m}%</span>`;
+      })()}</td>
       <td class="right"><span class="stock-badge ${sc}">${p.stock}</span></td>
       <td class="right" style="font-family:var(--ff-mono);font-size:13px">${diasTxt}</td>
       <td class="right"><div class="td-actions">
@@ -2727,7 +2983,146 @@ function renderInventario() {
   }).join('');
 }
 
+// ─── IMPORTAR FACTURA DE PROVEEDOR CON IA ─────────────────────────────────
+let _facturaItems = []; // items analizados por la IA
+let _facturaImageB64 = null;
+let _facturaMediaType = 'image/jpeg';
+
+function abrirModalFactura() {
+  if (!requirePro('Importar factura con IA')) return;
+  resetModalFactura();
+  document.getElementById('modal-factura').classList.add('open');
+}
+
+function resetModalFactura() {
+  _facturaItems = [];
+  _facturaImageB64 = null;
+  document.getElementById('factura-step-upload').style.display  = '';
+  document.getElementById('factura-step-review').style.display  = 'none';
+  document.getElementById('factura-status').style.display       = 'none';
+  document.getElementById('factura-preview-wrap').style.display = 'none';
+  document.getElementById('factura-img-input').value = '';
+}
+
+function onFacturaImageSelected(e) {
+  const file = e.target.files[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = ev => {
+    const dataUrl = ev.target.result;
+    const parts = dataUrl.split(',');
+    _facturaMediaType = (parts[0].match(/:(.*?);/) || [])[1] || 'image/jpeg';
+    _facturaImageB64  = parts[1];
+    document.getElementById('factura-preview-img').src = dataUrl;
+    document.getElementById('factura-preview-wrap').style.display = '';
+  };
+  reader.readAsDataURL(file);
+}
+
+async function analizarFactura() {
+  if (!_facturaImageB64) return;
+  const btn = document.getElementById('btn-analizar-factura');
+  btn.disabled = true; btn.textContent = '⏳ Analizando…';
+  document.getElementById('factura-status').style.display = '';
+  document.getElementById('factura-status').innerHTML = '🤖 Leyendo la factura… esto puede tomar unos segundos';
+  try {
+    const res = await apiFetch('/api/facturas/analizar', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ image: _facturaImageB64, mediaType: _facturaMediaType })
+    });
+    if (!res) return;
+    const data = await res.json();
+    if (!res.ok) { showToast('⚠ ' + (data.error || 'Error al analizar')); return; }
+
+    _facturaItems = data.items || [];
+    document.getElementById('factura-status').style.display = 'none';
+    document.getElementById('factura-step-upload').style.display = 'none';
+    document.getElementById('factura-step-review').style.display = '';
+
+    // Metadata de la factura
+    const metaParts = [];
+    if (data.proveedor) metaParts.push(`<strong>Proveedor:</strong> ${esc(data.proveedor)}`);
+    if (data.fecha)     metaParts.push(`<strong>Fecha:</strong> ${esc(data.fecha)}`);
+    metaParts.push(`<strong>${_facturaItems.length}</strong> productos detectados`);
+    const nuevos    = _facturaItems.filter(i => i.status === 'new').length;
+    const existentes = _facturaItems.filter(i => i.status === 'update').length;
+    if (existentes) metaParts.push(`<span style="color:var(--success,#16a34a)">✅ ${existentes} encontrados en inventario</span>`);
+    if (nuevos)     metaParts.push(`<span style="color:var(--accent)">🆕 ${nuevos} productos nuevos</span>`);
+    document.getElementById('factura-meta').innerHTML = metaParts.join(' &nbsp;·&nbsp; ');
+
+    renderFacturaItems();
+  } catch (err) {
+    showToast('⚠ Error: ' + err.message);
+  } finally {
+    btn.disabled = false; btn.textContent = '✨ Analizar con IA';
+    document.getElementById('factura-status').style.display = 'none';
+  }
+}
+
+function renderFacturaItems() {
+  const tbody = document.getElementById('factura-items-body');
+  tbody.innerHTML = _facturaItems.map((item, idx) => {
+    const isNew    = item.status === 'new';
+    const badge    = isNew
+      ? `<span style="background:var(--accent-bg,#fef3c7);color:var(--accent);font-size:11px;padding:2px 7px;border-radius:4px;font-weight:700">NUEVO</span>`
+      : `<span style="background:rgba(22,163,74,.1);color:var(--success,#16a34a);font-size:11px;padding:2px 7px;border-radius:4px;font-weight:700">+${item.qty} stock</span>`;
+    const matchTxt = isNew ? '' : `<div style="font-size:11px;color:var(--text-3);margin-top:2px">→ ${esc(item.prod_name || '')} (stock: ${item.stock_actual})</div>`;
+    const bcTxt    = item.barcode ? `<div style="font-size:10px;color:var(--text-3);font-family:var(--ff-mono)">${esc(item.barcode)}</div>` : '';
+    return `<tr style="border-bottom:1px solid var(--border)">
+      <td style="padding:8px 6px">
+        <input type="checkbox" checked onchange="_facturaItems[${idx}].incluir = this.checked"
+               style="width:16px;height:16px;cursor:pointer;accent-color:var(--accent)">
+      </td>
+      <td style="padding:8px 6px">
+        <div style="font-weight:600;font-size:13px">${esc(item.name)}</div>
+        ${bcTxt}${matchTxt}
+      </td>
+      <td style="padding:8px 6px;font-family:var(--ff-mono);font-size:13px;text-align:center">
+        <input type="number" value="${item.qty}" min="1"
+               onchange="_facturaItems[${idx}].qty = parseInt(this.value)||1"
+               style="width:56px;text-align:center;padding:4px;border:1px solid var(--border);border-radius:4px;background:var(--surf-2);color:var(--text);font-size:13px">
+      </td>
+      <td style="padding:8px 6px;font-family:var(--ff-mono);font-size:13px">
+        ${item.price_unit > 0 ? fmt(item.price_unit) : '—'}
+      </td>
+      <td style="padding:8px 6px">${badge}</td>
+    </tr>`;
+  }).join('');
+  // Inicializar 'incluir' en true
+  _facturaItems.forEach(i => { if (i.incluir === undefined) i.incluir = true; });
+}
+
+async function aplicarFactura() {
+  const seleccionados = _facturaItems.filter(i => i.incluir !== false);
+  if (!seleccionados.length) { showToast('⚠ No hay productos seleccionados'); return; }
+  const btn = document.getElementById('btn-aplicar-factura');
+  btn.disabled = true; btn.textContent = '⏳ Aplicando…';
+  try {
+    const res = await apiFetch('/api/facturas/aplicar', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ items: _facturaItems })
+    });
+    if (!res) return;
+    const data = await res.json();
+    if (!res.ok) { showToast('⚠ ' + (data.error || 'Error')); return; }
+    showToast(data.msg || '✅ Factura aplicada');
+    closeModal('modal-factura');
+    // Recargar inventario
+    const pRes = await apiFetch('/api/productos');
+    if (pRes && pRes.ok) {
+      products = await pRes.json();
+      renderProducts(); renderInventario(); updateLowStockBadge(); renderCatPills();
+      _loadThumbnailsBackground();
+    }
+  } finally {
+    btn.disabled = false; btn.textContent = '✅ Aplicar cambios';
+  }
+}
+
 async function generarPedido() {
+  if (!requirePro('Sugerencias de pedido con IA')) return;
   const btn = document.getElementById('btn-pedido');
   btn.disabled = true; btn.textContent = '⏳ Analizando...';
 
@@ -2861,6 +3256,7 @@ function onPhotoSelected(event) {
 }
 
 async function analyzePhoto() {
+  if (!requirePro('Análisis de fotos con IA')) return;
   if (!currentImageB64) return;
   const btn = document.getElementById('btn-analyze');
   const status = document.getElementById('analyze-status');
@@ -2923,8 +3319,11 @@ function openProdModal(id) {
     document.getElementById('prod-barcode').value = p.barcode;
     document.getElementById('prod-cat').value = p.cat;
     setMoney('prod-price', p.price);
+    if (p.precio_compra) setMoney('prod-precio-compra', p.precio_compra);
+    else document.getElementById('prod-precio-compra').value = '';
     document.getElementById('prod-stock').value = p.stock;
     document.getElementById('prod-alert').value = p.alert;
+    _updateMargenHint();
     // Mostrar miniatura existente directamente desde los datos del producto
     if (p.thumbnail) {
       document.getElementById('photo-img').src = p.thumbnail;
@@ -2934,9 +3333,10 @@ function openProdModal(id) {
       thumbnailChanged = false; // no enviar thumbnail al guardar salvo que cambie
     }
   } else {
-    ['prod-id','prod-emoji','prod-name','prod-barcode','prod-cat','prod-price','prod-stock','prod-alert']
+    ['prod-id','prod-emoji','prod-name','prod-barcode','prod-cat','prod-price','prod-precio-compra','prod-stock','prod-alert']
       .forEach(f => document.getElementById(f).value = '');
     document.getElementById('prod-alert').value = '5';
+    document.getElementById('margen-hint').style.display = 'none';
   }
   document.getElementById('modal-producto').classList.add('open');
   // Auto-foco en barcode para el scanner
@@ -2948,11 +3348,12 @@ async function saveProduct() {
   const data = {
     emoji:     document.getElementById('prod-emoji').value || '📦',
     name:      document.getElementById('prod-name').value.trim(),
-    barcode:   document.getElementById('prod-barcode').value.trim(),
-    cat:       document.getElementById('prod-cat').value.trim() || 'General',
-    price:     parseMoney('prod-price'),
-    stock:     parseInt(document.getElementById('prod-stock').value) || 0,
-    alert:     parseInt(document.getElementById('prod-alert').value) || 5,
+    barcode:        document.getElementById('prod-barcode').value.trim(),
+    cat:            document.getElementById('prod-cat').value.trim() || 'General',
+    price:          parseMoney('prod-price'),
+    precio_compra:  parseMoney('prod-precio-compra') || null,
+    stock:          parseInt(document.getElementById('prod-stock').value) || 0,
+    alert:          parseInt(document.getElementById('prod-alert').value) || 5,
     ...(thumbnailChanged ? { thumbnail: currentImageB64 ? `data:${currentMediaType};base64,${currentImageB64}` : null } : {}),
   };
   if (!data.name) { showToast('⚠ Ingresa un nombre'); return; }
@@ -3040,6 +3441,28 @@ function renderReportes() {
   document.getElementById('kpi-ef-pct').textContent = total ? `${Math.round(efectivo/total*100)}% del total` : '0% del total';
   document.getElementById('kpi-tr-pct').textContent = total ? `${Math.round(transf/total*100)}% del total` : '0% del total';
   document.getElementById('kpi-delta').textContent = '↑ ' + (filtered.length ? Math.floor(Math.random()*20+5) : 0) + '%';
+
+  // Margen de ganancia estimado (solo si hay productos con precio_compra)
+  const prodConCosto = products.filter(p => p.precio_compra > 0);
+  const margenCard = document.getElementById('kpi-margen-card');
+  if (prodConCosto.length > 0 && filtered.length > 0) {
+    let gananciaTotal = 0, costoTotal = 0;
+    filtered.forEach(s => s.items.forEach(i => {
+      const prod = products.find(p => p.name === i.name);
+      if (prod && prod.precio_compra > 0) {
+        gananciaTotal += (prod.price - prod.precio_compra) * i.qty;
+        costoTotal    += prod.precio_compra * i.qty;
+      }
+    }));
+    margenCard.style.display = '';
+    document.getElementById('kpi-margen').textContent = fmt(gananciaTotal);
+    const margenPct = costoTotal > 0 ? Math.round(gananciaTotal / costoTotal * 100) : 0;
+    const margenEl = document.getElementById('kpi-margen-pct');
+    margenEl.textContent = `${margenPct}% margen`;
+    margenEl.style.color = gananciaTotal >= 0 ? 'var(--success,#16a34a)' : 'var(--danger,#dc2626)';
+  } else {
+    margenCard.style.display = 'none';
+  }
 
   // Transactions list
   const txList = document.getElementById('tx-list');
@@ -3270,6 +3693,7 @@ async function openCierreModal() {
 
   const iaSection = document.getElementById('cierre-ia-section');
   const iaTexto   = document.getElementById('cierre-ia-texto');
+  if (!isPro()) { iaSection.style.display = 'none'; return; }
   iaSection.style.display = 'block';
   iaTexto.textContent = '⏳ Generando resumen...';
 
@@ -3409,6 +3833,7 @@ async function iniciarApp(user, tienda) {
     renderInventario();
     renderReportes();
     updateLowStockBadge();
+    _actualizarBotonesProUI();
     // Si admin, agregar pestaña Usuarios
     if (user.rol === 'admin') {
       let tabUsuarios = document.getElementById('tab-usuarios');
@@ -3473,9 +3898,73 @@ async function renderSuperadmin() {
             }
           </tbody>
         </table>
+      </div>
+      <div style="margin-top:24px">
+        <button class="btn-secondary" onclick="verDiagnosticoInventario()" style="font-size:13px">
+          🔍 Diagnóstico de inventario (productos por tienda)
+        </button>
+        <div id="diagnostico-inv" style="display:none; margin-top:12px"></div>
       </div>`;
   } catch(e) {
     content.innerHTML = '<p style="color:var(--danger)">Error cargando tiendas</p>';
+  }
+}
+
+async function verDiagnosticoInventario() {
+  const box = document.getElementById('diagnostico-inv');
+  if (!box) return;
+  box.style.display = '';
+  box.innerHTML = '⏳ Consultando...';
+  try {
+    const res = await apiFetch('/api/admin/diagnostico');
+    if (!res || !res.ok) { box.innerHTML = '<span style="color:var(--danger)">Error</span>'; return; }
+    const data = await res.json();
+    const tiendas = data.tiendas || [];
+    const sinTienda = tiendas[0]?.sin_tienda || 0;
+    box.innerHTML = `
+      <div style="background:var(--surf-2);border:1px solid var(--border);border-radius:10px;padding:16px;font-size:13px">
+        <div style="font-weight:700;margin-bottom:10px">Distribución de productos en DB</div>
+        ${tiendas.map(t => `
+          <div style="display:flex;align-items:center;gap:10px;padding:8px 0;border-bottom:1px solid var(--border)">
+            <div style="flex:1"><strong>${esc(t.nombre)}</strong> <span style="color:var(--text-3);font-size:12px">(id=${t.id}, plan=${t.plan})</span></div>
+            <div style="font-family:var(--ff-mono);font-weight:700;min-width:80px;text-align:right">
+              ${t.productos} productos
+            </div>
+            ${tiendas.length > 1 ? tiendas.filter(x=>x.id!==t.id).map(dest => `
+              <button class="btn-secondary" style="font-size:11px;padding:3px 8px"
+                      onclick="reasignarProductos(${t.id},'${esc(t.nombre)}',${dest.id},'${esc(dest.nombre)}')">
+                → ${esc(dest.nombre)}
+              </button>`).join('') : ''}
+          </div>`).join('')}
+        ${sinTienda > 0 ? `
+          <div style="padding:8px 0;color:var(--warn)">
+            ⚠ ${sinTienda} productos sin tienda asignada —
+            ${tiendas.map(t => `<button class="btn-secondary" style="font-size:11px;padding:3px 8px;margin-left:4px"
+              onclick="reasignarProductos(null,'sin tienda',${t.id},'${esc(t.nombre)}')">→ ${esc(t.nombre)}</button>`).join('')}
+          </div>` : ''}
+      </div>`;
+  } catch(e) {
+    box.innerHTML = `<span style="color:var(--danger)">Error: ${e.message}</span>`;
+  }
+}
+
+async function reasignarProductos(desdeId, desdeNombre, haciaId, haciaNombre) {
+  const msg = desdeId === null
+    ? `¿Asignar todos los productos SIN TIENDA a "${haciaNombre}"?`
+    : `¿Mover TODOS los productos de "${desdeNombre}" a "${haciaNombre}"?\n\nEsto no se puede deshacer fácilmente.`;
+  if (!confirm(msg)) return;
+  try {
+    const res = await apiFetch('/api/admin/reasignar-productos', {
+      method: 'POST',
+      headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({desde_tienda_id: desdeId, hacia_tienda_id: haciaId})
+    });
+    if (!res || !res.ok) { showToast('⚠ Error en reasignación'); return; }
+    const d = await res.json();
+    showToast(`✅ ${d.actualizados} productos reasignados a "${haciaNombre}"`);
+    verDiagnosticoInventario(); // refrescar diagnóstico
+  } catch(e) {
+    showToast('⚠ Error: ' + e.message);
   }
 }
 
