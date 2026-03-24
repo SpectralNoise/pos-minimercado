@@ -1694,6 +1694,44 @@ table.inv-table {
   .inv-card-price { font-size: 13px; }
 }
 
+/* ── BOTÓN PRECIO MANUAL ── */
+.btn-manual-price {
+  width: 42px; height: 42px; border-radius: var(--r-md); flex-shrink: 0;
+  border: 1.5px solid var(--accent-brd); background: var(--accent-bg);
+  font-size: 20px; cursor: pointer; display: flex; align-items: center;
+  justify-content: center; transition: all var(--trans);
+}
+.btn-manual-price:hover { background: var(--accent); border-color: var(--accent); filter: brightness(1.1); }
+.btn-manual-price:active { transform: scale(.9); }
+
+/* ── MODAL PRECIO MANUAL ── */
+.manual-emoji-grid {
+  display: grid; grid-template-columns: repeat(8, 1fr); gap: 5px;
+}
+.emoji-quick {
+  height: 38px; border-radius: var(--r-sm); border: 1px solid var(--border);
+  background: var(--surf-2); font-size: 20px; cursor: pointer;
+  display: flex; align-items: center; justify-content: center;
+  transition: all 100ms; padding: 0;
+}
+.emoji-quick:hover { background: var(--surf-3); border-color: var(--border-hi); transform: scale(1.1); }
+.emoji-quick:active { transform: scale(.9); }
+.emoji-quick.active { background: var(--accent-bg); border-color: var(--accent-brd); }
+/* Tag "manual" en ítems del carrito */
+.ci-manual-tag {
+  display: inline-block; font-size: 9px; font-family: var(--ff-disp); font-weight: 800;
+  letter-spacing: .06em; text-transform: uppercase; color: var(--accent);
+  background: var(--accent-bg); border: 1px solid var(--accent-brd);
+  border-radius: 4px; padding: 1px 5px; margin-left: 4px; vertical-align: middle;
+}
+/* Ítem manual: borde izquierdo ámbar */
+.cart-item.manual-item { border-left: 3px solid var(--accent-hi); }
+/* Grid compacto en mobile */
+@media (max-width: 640px) {
+  .manual-emoji-grid { grid-template-columns: repeat(8, 1fr); gap: 4px; }
+  .emoji-quick { height: 34px; font-size: 18px; }
+}
+
 /* ══════════════════════════════════════════
    STITCH UI POLISH — v3
    Botones · Modales · Super Admin · Mobile Logout
@@ -2022,6 +2060,7 @@ button:not(:disabled):active {
         </div>
         <span id="search-count" class="search-count"></span>
         <button class="btn-cam-scan" onclick="openCameraScanner('cobro')" title="Escanear código con cámara">📷</button>
+        <button class="btn-manual-price" onclick="openManualItem()" title="Agregar precio manual (frutas/verduras por peso)">⚖️</button>
         <div class="scan-indicator ready" style="flex-shrink:0" id="scan-ind-cobro">
           <span class="dot"></span> Scanner
         </div>
@@ -2252,6 +2291,60 @@ button:not(:disabled):active {
   </nav>
 
 </div><!-- #app -->
+
+<!-- MODAL: PRECIO MANUAL (frutas, verduras, productos por peso) -->
+<div class="modal-overlay" id="modal-manual-item">
+  <div class="modal" style="max-width:360px">
+    <div class="modal-header">
+      <h2>Precio manual</h2>
+      <button class="btn-close" onclick="closeModal('modal-manual-item')">✕</button>
+    </div>
+    <div class="modal-body">
+      <div style="display:flex;gap:10px;align-items:flex-end;">
+        <div class="form-group" style="flex:0 0 72px">
+          <label class="form-label">Emoji</label>
+          <input type="text" class="form-input" id="manual-emoji" value="⚖️" maxlength="4"
+            style="text-align:center;font-size:24px;padding:0 4px;height:48px;">
+        </div>
+        <div class="form-group" style="flex:1">
+          <label class="form-label">Descripción</label>
+          <input type="text" class="form-input" id="manual-name" placeholder="Ej: Plátano x500g"
+            maxlength="60" autocomplete="off" style="height:48px;">
+        </div>
+      </div>
+      <!-- Acceso rápido emojis frutas/verduras -->
+      <div class="manual-emoji-grid">
+        <button class="emoji-quick" onclick="setManualEmoji('🍌')">🍌</button>
+        <button class="emoji-quick" onclick="setManualEmoji('🍎')">🍎</button>
+        <button class="emoji-quick" onclick="setManualEmoji('🍊')">🍊</button>
+        <button class="emoji-quick" onclick="setManualEmoji('🍋')">🍋</button>
+        <button class="emoji-quick" onclick="setManualEmoji('🍇')">🍇</button>
+        <button class="emoji-quick" onclick="setManualEmoji('🍓')">🍓</button>
+        <button class="emoji-quick" onclick="setManualEmoji('🍅')">🍅</button>
+        <button class="emoji-quick" onclick="setManualEmoji('🥦')">🥦</button>
+        <button class="emoji-quick" onclick="setManualEmoji('🥕')">🥕</button>
+        <button class="emoji-quick" onclick="setManualEmoji('🌽')">🌽</button>
+        <button class="emoji-quick" onclick="setManualEmoji('🥑')">🥑</button>
+        <button class="emoji-quick" onclick="setManualEmoji('🫒')">🫒</button>
+        <button class="emoji-quick" onclick="setManualEmoji('🥔')">🥔</button>
+        <button class="emoji-quick" onclick="setManualEmoji('🧅')">🧅</button>
+        <button class="emoji-quick" onclick="setManualEmoji('⚖️')">⚖️</button>
+        <button class="emoji-quick" onclick="setManualEmoji('🥩')">🥩</button>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Valor a cobrar ($)</label>
+        <input type="text" inputmode="numeric" class="form-input mono" id="manual-price"
+          placeholder="0" oninput="fmtInput(this)"
+          onkeydown="if(event.key==='Enter') submitManualItem()"
+          style="font-size:26px;height:58px;text-align:right;letter-spacing:.02em;">
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn-secondary" onclick="closeModal('modal-manual-item')">Cancelar</button>
+      <button class="btn-primary" onclick="submitManualItem()">+ Agregar al carrito</button>
+    </div>
+  </div>
+</div>
 
 <!-- MODAL: CONFIRM (reemplaza confirm() nativo del navegador) -->
 <div class="modal-overlay" id="modal-confirm">
@@ -3585,6 +3678,38 @@ function _processScan(barcode) {
   }
 }
 
+// ─── PRECIO MANUAL (frutas/verduras por peso) ─
+let _manualIdCounter = 0;
+
+function openManualItem() {
+  document.getElementById('manual-price').value = '';
+  document.getElementById('manual-name').value  = '';
+  document.getElementById('manual-emoji').value = '⚖️';
+  openModal('modal-manual-item');
+  setTimeout(() => document.getElementById('manual-name').focus(), 120);
+}
+
+function setManualEmoji(e) {
+  document.getElementById('manual-emoji').value = e;
+  // Resaltar el botón activo
+  document.querySelectorAll('.emoji-quick').forEach(b => b.classList.remove('active'));
+  event.target.closest('.emoji-quick').classList.add('active');
+}
+
+function submitManualItem() {
+  const emoji = document.getElementById('manual-emoji').value.trim() || '⚖️';
+  const name  = document.getElementById('manual-name').value.trim() || 'Producto manual';
+  const price = parseMoney('manual-price');
+  if (!price || price <= 0) { showToast('⚠ Ingresa un valor mayor a $0'); return; }
+  _manualIdCounter--;   // IDs negativos para ítems manuales
+  cart.push({ id: _manualIdCounter, emoji, name, price, qty: 1, manual: true });
+  _lastAddedCartId = _manualIdCounter;
+  renderCart();
+  closeModal('modal-manual-item');
+  showToast(`${emoji} ${name} agregado — ${fmt(price)}`, 'success');
+  if (window.innerWidth <= 640) openCartSheet();
+}
+
 // ─── COBRO: CART ──────────────────────────────
 let _lastAddedCartId = null;
 function addToCart(productId) {
@@ -3647,10 +3772,10 @@ function renderCart() {
     return;
   }
   container.innerHTML = cart.map(item => `
-    <div class="cart-item" data-id="${item.id}">
+    <div class="cart-item${item.manual ? ' manual-item' : ''}" data-id="${item.id}">
       <div class="ci-emoji">${esc(item.emoji)}</div>
       <div class="ci-info">
-        <div class="ci-name">${esc(item.name)}</div>
+        <div class="ci-name">${esc(item.name)}${item.manual ? ' <span class="ci-manual-tag">manual</span>' : ''}</div>
         <div class="ci-price">${fmt(item.price)} / u</div>
       </div>
       <div class="ci-qty">
