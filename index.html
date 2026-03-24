@@ -1297,11 +1297,22 @@ table.inv-table {
     z-index: 196;
     transform: translateY(100%);
     transition: transform 300ms cubic-bezier(.32,1,.64,1);
-    overflow-y: auto;
+    /* Flex column: footer siempre visible, solo items hace scroll */
+    display: flex !important; flex-direction: column;
+    overflow: hidden;
     padding-bottom: env(safe-area-inset-bottom, 0px);
   }
   #cart-panel.cart-open {
     transform: translateY(0);
+  }
+  /* Items: scroll interno, footer fijo */
+  #cart-panel .cart-items {
+    flex: 1; overflow-y: auto; max-height: none;
+    -webkit-overflow-scrolling: touch;
+  }
+  /* Footer siempre anclado abajo */
+  #cart-panel .cart-footer {
+    flex-shrink: 0;
   }
   /* Drag handle + close btn visible on mobile */
   .cart-drag-handle {
@@ -3853,12 +3864,6 @@ async function completarVenta() {
     const data = await res.json();
     if (!res.ok) throw new Error(data.error);
 
-    // Recargar productos para reflejar stock actualizado
-    const pRes = await apiFetch('/api/productos');
-    if (!pRes) return;
-    products = await pRes.json();
-    _loadThumbnailsBackground();
-
     lastSale = {
       id:       data.venta.id,
       turno_id: cajaSession?.id ?? null,
@@ -3872,9 +3877,14 @@ async function completarVenta() {
     sales.unshift(lastSale);
     if (cajaSession) cajaSession.ventasIds.push(lastSale.id);
 
-    updateLowStockBadge();
+    // Mostrar recibo INMEDIATAMENTE — sin esperar recarga de productos
     closeModal('modal-pago');
     showRecibo();
+
+    // Recargar stock en segundo plano (no bloquea UI)
+    apiFetch('/api/productos').then(r => r && r.json()).then(data => {
+      if (data) { products = data; _loadThumbnailsBackground(); updateLowStockBadge(); renderProducts(); }
+    });
   } catch (err) {
     showToast('⚠ Error al registrar venta: ' + err.message);
   }
