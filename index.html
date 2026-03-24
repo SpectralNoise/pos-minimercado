@@ -1333,7 +1333,9 @@ table.inv-table {
   .page-title { font-size: 22px; flex: 1; }
   .inv-search-wrap { max-width: 100%; flex: 1 1 100%; order: 3; height: 40px; }
   /* Hide bulky secondary buttons on mobile, keep essential ones */
-  #btn-importar-factura { display: none !important; }
+  /* Importar factura: visible en mobile como ícono compacto */
+  #btn-importar-factura { display: inline-flex !important; padding: 0 10px; font-size: 13px; height: 38px; }
+  .btn-factura-label { display: none; } /* Solo ícono en mobile */
   #btn-pedido { display: none !important; }
   .btn-view-toggle { display: none; }
   .btn-primary { height: 40px; font-size: 14px; padding: 0 14px; }
@@ -2052,7 +2054,7 @@ button:not(:disabled):active {
         <input type="text" id="inv-search" placeholder="Buscar producto..." autocomplete="off">
       </div>
       <button class="btn-secondary" onclick="exportCSV()">⬇ CSV</button>
-      <button class="btn-secondary" id="btn-importar-factura" onclick="abrirModalFactura()" title="Importar factura de proveedor con IA (Plan Pro)">📄 Importar factura</button>
+      <button class="btn-secondary" id="btn-importar-factura" onclick="abrirModalFactura()" title="Importar factura de proveedor con IA (Plan Pro)">📄 <span class="btn-factura-label">Importar factura</span></button>
       <button class="btn-secondary" id="btn-pedido" onclick="generarPedido()" title="IA sugiere qué pedir esta semana">🛒 ¿Qué pedir?</button>
       <button class="btn-secondary" id="btn-refresh-inv" onclick="recargarInventario()" title="Actualizar inventario">🔄</button>
       <button class="btn-view-toggle" id="btn-view-toggle" onclick="toggleInvView()" title="Cambiar vista">⊞ Tarjetas</button>
