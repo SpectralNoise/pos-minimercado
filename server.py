@@ -570,7 +570,7 @@ class Handler(BaseHTTPRequestHandler):
                 if user["tienda_id"] is not None:
                     t = conn.execute("SELECT * FROM tiendas WHERE id=?", (user["tienda_id"],)).fetchone()
                     if t:
-                        tienda = {"id": t["id"], "nombre": t["nombre"], "slug": t["slug"], "tipo": t["tipo"]}
+                        tienda = {"id": t["id"], "nombre": t["nombre"], "slug": t["slug"], "plan": t["plan"], "tipo": t["tipo"]}
                 token, exp = self._make_token(user["id"], user["tienda_id"], user["rol"])
                 self.send_json({
                     "token": token, "exp": exp,
@@ -747,7 +747,7 @@ class Handler(BaseHTTPRequestHandler):
                     tienda_row = conn.execute("SELECT * FROM tiendas WHERE id=?", (user["tienda_id"],)).fetchone()
                     if not tienda_row or not tienda_row["activo"]:
                         self.send_error_json("Tienda inactiva", 401); return
-                    tienda = {"id": tienda_row["id"], "nombre": tienda_row["nombre"], "slug": tienda_row["slug"]}
+                    tienda = {"id": tienda_row["id"], "nombre": tienda_row["nombre"], "slug": tienda_row["slug"], "plan": tienda_row["plan"], "tipo": tienda_row.get("tipo")}
                 token, exp = self._make_token(user["id"], user["tienda_id"], user["rol"])
                 self.send_json({
                     "token": token, "exp": exp,
@@ -773,7 +773,7 @@ class Handler(BaseHTTPRequestHandler):
                 if ctx.tienda_id is not None:
                     t = conn.execute("SELECT * FROM tiendas WHERE id=?", (ctx.tienda_id,)).fetchone()
                     if t:
-                        tienda = {"id": t["id"], "nombre": t["nombre"], "slug": t["slug"], "tipo": t["tipo"]}
+                        tienda = {"id": t["id"], "nombre": t["nombre"], "slug": t["slug"], "plan": t["plan"], "tipo": t["tipo"]}
                 rc_count = conn.execute(
                     "SELECT COUNT(*) FROM recovery_codes WHERE user_id=?", (user["id"],)
                 ).fetchone()[0]
