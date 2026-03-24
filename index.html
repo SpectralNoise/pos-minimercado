@@ -2066,7 +2066,6 @@ button:not(:disabled):active {
         </div>
         <span id="search-count" class="search-count"></span>
         <button class="btn-cam-scan" onclick="openCameraScanner('cobro')" title="Escanear código con cámara">📷</button>
-        <button class="btn-manual-price" onclick="openManualItem()" title="Agregar precio manual (frutas/verduras por peso)">⚖️</button>
         <div class="scan-indicator ready" style="flex-shrink:0" id="scan-ind-cobro">
           <span class="dot"></span> Scanner
         </div>
@@ -3898,7 +3897,7 @@ function showRecibo() {
 
   document.getElementById('receipt-content').innerHTML = `
     <div class="receipt-logo">
-      <div class="r-store">Mini Mercado</div>
+      <div class="r-store">${esc(currentUser?.tienda?.nombre || 'AESSPOS')}</div>
       <div class="r-sub">Sistema POS · Recibo de venta</div>
     </div>
     <hr class="receipt-divider">
@@ -3969,7 +3968,7 @@ async function sendWhatsApp() {
   };
 
   // ── Cabecera ────────────────────────────────
-  center('Mini Mercado', 'bold 20px monospace'); y += 26;
+  center(currentUser?.tienda?.nombre || 'AESSPOS', 'bold 20px monospace'); y += 26;
   center('Recibo de Venta', '13px monospace', '#555'); y += LH;
   center(`#${s.id}  ·  ${fecha}  ${hora}`, '11px monospace', '#888'); y += LHsm;
   y += 10; div(); y += 10;
