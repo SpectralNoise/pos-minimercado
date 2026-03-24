@@ -1993,8 +1993,8 @@ function renderProducts() {
   grid.innerHTML = filtered.map(p => {
     const stockClass = p.stock === 0 ? 'out-txt' : p.stock <= p.alert ? 'low' : '';
     const stockTxt = p.stock === 0 ? 'Sin stock' : `Stock: ${p.stock}`;
-    const thumb = p.has_thumbnail
-      ? `<img src="/api/productos/${p.id}/thumbnail" class="prod-thumb" alt="">`
+    const thumb = p.thumbnail
+      ? `<img src="${p.thumbnail}" class="prod-thumb" alt="" loading="lazy">`
       : `<div class="prod-emoji">${esc(p.emoji)}</div>`;
     return `<div class="prod-card ${p.stock===0?'out':''}" onclick="addToCart(${p.id})">
       ${thumb}
@@ -2653,7 +2653,7 @@ function renderInventario() {
       : `<span style="color:var(--success)">${dias}d</span>`;
     return `<tr onclick="openProdModal(${p.id})">
       <td><div class="td-name">
-        ${p.has_thumbnail ? `<img src="/api/productos/${p.id}/thumbnail" style="width:32px;height:32px;object-fit:contain;border-radius:4px;flex-shrink:0">` : `<span class="t-emoji">${esc(p.emoji)}</span>`}
+        ${p.thumbnail ? `<img src="${p.thumbnail}" style="width:32px;height:32px;object-fit:contain;border-radius:4px;flex-shrink:0" loading="lazy">` : `<span class="t-emoji">${esc(p.emoji)}</span>`}
         <div><div class="t-nm">${esc(p.name)}</div><div class="t-bar">${esc(p.barcode)}</div></div>
       </div></td>
       <td><span class="td-cat">${esc(p.cat)}</span></td>
@@ -2865,9 +2865,9 @@ function openProdModal(id) {
     setMoney('prod-price', p.price);
     document.getElementById('prod-stock').value = p.stock;
     document.getElementById('prod-alert').value = p.alert;
-    // Pre-cargar miniatura existente (via URL, sin traer el base64)
-    if (p.has_thumbnail) {
-      document.getElementById('photo-img').src = `/api/productos/${p.id}/thumbnail`;
+    // Mostrar miniatura existente directamente desde los datos del producto
+    if (p.thumbnail) {
+      document.getElementById('photo-img').src = p.thumbnail;
       document.getElementById('photo-preview').style.display = 'block';
       document.getElementById('photo-zone').style.display = 'none';
       document.getElementById('analyze-status').textContent = 'Imagen actual del producto.';

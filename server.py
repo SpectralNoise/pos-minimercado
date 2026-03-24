@@ -284,6 +284,12 @@ def init_db():
         except (sqlite3.OperationalError, ValueError) as e:
             if "duplicate column name" not in str(e):
                 raise
+    # Migración: reasignar productos/ventas sin tienda_id a la primera tienda (datos pre-multitienda)
+    primera = conn.execute("SELECT id FROM tiendas ORDER BY id LIMIT 1").fetchone()
+    if primera:
+        for table in ('productos', 'ventas'):
+            conn.execute(f"UPDATE {table} SET tienda_id=? WHERE tienda_id IS NULL", (primera["id"],))
+        conn.commit()
     # Migraciones 2FA / Google OAuth
     for col, definition in [
         ('google_email',  'TEXT DEFAULT NULL'),
@@ -805,14 +811,12 @@ class Handler(BaseHTTPRequestHandler):
             try:
                 if ctx.rol == 'superadmin':
                     rows = conn.execute(
-                        "SELECT id,emoji,name,barcode,cat,price,stock,alert,"
-                        "(thumbnail IS NOT NULL AND thumbnail != '') AS has_thumbnail "
+                        "SELECT id,emoji,name,barcode,cat,price,stock,alert,thumbnail "
                         "FROM productos ORDER BY name"
                     ).fetchall()
                 else:
                     rows = conn.execute(
-                        "SELECT id,emoji,name,barcode,cat,price,stock,alert,"
-                        "(thumbnail IS NOT NULL AND thumbnail != '') AS has_thumbnail "
+                        "SELECT id,emoji,name,barcode,cat,price,stock,alert,thumbnail "
                         "FROM productos WHERE tienda_id=? ORDER BY name",
                         (ctx.tienda_id,)
                     ).fetchall()
@@ -993,6 +997,21 @@ class Handler(BaseHTTPRequestHandler):
             self.send_error_json("Ruta no encontrada", 404)
 
     # ── CRUD PRODUCTOS ─────────────────────────────────────────────
+    def _compress_thumbnail(self, data_url):
+        """Comprime cualquier imagen a 80×80 JPEG @70 antes de guardarla."""
+        if not data_url or not PIL_AVAILABLE:
+            return data_url
+        try:
+            header, b64 = data_url.split(",", 1)
+            img_bytes = base64.b64decode(b64)
+            img = Image.open(io.BytesIO(img_bytes)).convert("RGB")
+            img.thumbnail((80, 80), Image.LANCZOS)
+            buf = io.BytesIO()
+            img.save(buf, format="JPEG", quality=70)
+            return f"data:image/jpeg;base64,{base64.b64encode(buf.getvalue()).decode()}"
+        except Exception:
+            return data_url  # si falla, guardar original
+
     def _create_producto(self):
         ctx = self.require_auth()
         if not ctx: return
@@ -1007,11 +1026,11 @@ class Handler(BaseHTTPRequestHandler):
                 "INSERT INTO productos (emoji,name,barcode,cat,price,stock,alert,thumbnail,tienda_id) VALUES (?,?,?,?,?,?,?,?,?)",
                 (body.get("emoji","📦"), body["name"], body.get("barcode",""),
                  body.get("cat","General"), body.get("price",0),
-                 body.get("stock",0), body.get("alert",5), body.get("thumbnail"), tienda_id)
+                 body.get("stock",0), body.get("alert",5),
+                 self._compress_thumbnail(body.get("thumbnail")), tienda_id)
             )
             row = conn.execute(
-                "SELECT id,emoji,name,barcode,cat,price,stock,alert,"
-                "(thumbnail IS NOT NULL AND thumbnail != '') AS has_thumbnail "
+                "SELECT id,emoji,name,barcode,cat,price,stock,alert,thumbnail "
                 "FROM productos WHERE id=?", (c.lastrowid,)
             ).fetchone()
             conn.commit(); conn.close()
@@ -1034,7 +1053,8 @@ class Handler(BaseHTTPRequestHandler):
                     f"UPDATE productos SET emoji=?,name=?,barcode=?,cat=?,price=?,stock=?,alert=?,thumbnail=? WHERE id=?{tienda_filter}",
                     (body.get("emoji","📦"), body["name"], body.get("barcode",""),
                      body.get("cat","General"), body.get("price",0),
-                     body.get("stock",0), body.get("alert",5), body.get("thumbnail"), prod_id) + tienda_params
+                     body.get("stock",0), body.get("alert",5),
+                     self._compress_thumbnail(body.get("thumbnail")), prod_id) + tienda_params
                 )
             else:
                 conn.execute(
@@ -1414,9 +1434,9 @@ Al final, un consejo breve sobre los productos sin rotación."""
                     with urllib.request.urlopen(img_url, timeout=5) as ir:
                         img_bytes = ir.read()
                     img = Image.open(io.BytesIO(img_bytes)).convert("RGB")
-                    img.thumbnail((128, 128), Image.LANCZOS)
+                    img.thumbnail((80, 80), Image.LANCZOS)
                     buf = io.BytesIO()
-                    img.save(buf, format="JPEG", quality=85)
+                    img.save(buf, format="JPEG", quality=70)
                     thumbnail = f"data:image/jpeg;base64,{base64.b64encode(buf.getvalue()).decode()}"
                 except Exception:
                     pass
@@ -1475,9 +1495,9 @@ Al final, un consejo breve sobre los productos sin rotación."""
                         with urllib.request.urlopen(img_url, timeout=4) as ir:
                             img_bytes = ir.read()
                         img = Image.open(io.BytesIO(img_bytes)).convert("RGB")
-                        img.thumbnail((256, 256), Image.LANCZOS)
+                        img.thumbnail((80, 80), Image.LANCZOS)
                         buf = io.BytesIO()
-                        img.save(buf, format="JPEG", quality=88)
+                        img.save(buf, format="JPEG", quality=70)
                         thumbnail = f"data:image/jpeg;base64,{base64.b64encode(buf.getvalue()).decode()}"
                         break
                     except Exception:
