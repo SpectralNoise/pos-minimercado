@@ -1086,7 +1086,250 @@ table.inv-table {
   .btn-cerrar-caja { width: calc(100% - 36px); margin: 0 18px 18px; }
 
   /* TOAST */
-  .toast { bottom: 16px; font-size: 13px; max-width: calc(100vw - 32px); white-space: normal; text-align: center; }
+  .toast { bottom: 80px; font-size: 13px; max-width: calc(100vw - 32px); white-space: normal; text-align: center; }
+}
+
+/* ══════════════════════════════════════════
+   MOBILE REDESIGN — Stitch "The Digital Ledger"
+   Breakpoint: ≤ 640px
+══════════════════════════════════════════ */
+
+/* ── BOTTOM NAV ── */
+#mobile-bottom-nav {
+  display: none; /* shown only in mobile media query */
+  position: fixed; bottom: 0; left: 0; right: 0; z-index: 200;
+  background: rgba(250,249,246,.95);
+  backdrop-filter: blur(16px); -webkit-backdrop-filter: blur(16px);
+  border-top: 1px solid var(--border);
+  box-shadow: 0 -2px 12px var(--accent-shadow);
+  height: 64px; align-items: stretch;
+  padding-bottom: env(safe-area-inset-bottom, 0px);
+}
+[data-theme="dark"] #mobile-bottom-nav { background: rgba(17,17,16,.95); }
+.mbn-tab {
+  flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center;
+  gap: 3px; border: none; background: none; cursor: pointer;
+  padding: 6px 4px; transition: all 120ms; position: relative;
+  -webkit-tap-highlight-color: transparent;
+}
+.mbn-tab::after {
+  content: ''; position: absolute; top: 0; left: 50%;
+  transform: translateX(-50%); width: 28px; height: 3px;
+  background: var(--accent); border-radius: 0 0 3px 3px;
+  opacity: 0; transition: opacity 140ms;
+}
+.mbn-tab.active::after { opacity: 1; }
+.mbn-tab:active { transform: scale(.93); }
+.mbn-icon { font-size: 22px; line-height: 1; transition: transform 140ms; }
+.mbn-tab.active .mbn-icon { transform: scale(1.1); }
+.mbn-label {
+  font-family: var(--ff-disp); font-size: 10px; font-weight: 800;
+  letter-spacing: .05em; text-transform: uppercase; color: var(--text-3);
+  transition: color 140ms;
+}
+.mbn-tab.active .mbn-label { color: var(--accent); }
+
+/* ── CART DRAG HANDLE ── */
+.cart-drag-handle { display: none; }
+
+/* ── CART SHEET CLOSE BUTTON ── */
+.cart-sheet-close { display: none; }
+
+/* ── CART MINI BAR ── */
+#cart-mini-bar {
+  display: none; /* shown only in mobile media query */
+  position: fixed; left: 12px; right: 12px; z-index: 190;
+  background: linear-gradient(135deg, var(--accent) 0%, var(--accent-hi) 100%);
+  border-radius: var(--r-lg); height: 58px;
+  align-items: center; justify-content: space-between;
+  padding: 0 12px 0 20px;
+  box-shadow: 0 8px 24px rgba(143,78,0,.35), 0 2px 6px rgba(0,0,0,.15);
+  cursor: pointer;
+  animation: cmb-in 260ms cubic-bezier(.34,1.56,.64,1);
+}
+@keyframes cmb-in {
+  from { transform: translateY(16px); opacity: 0; }
+  to   { transform: translateY(0);    opacity: 1; }
+}
+#cart-mini-bar:active { transform: scale(.98); transition: transform 80ms; }
+.cmb-info { display: flex; flex-direction: column; gap: 1px; }
+.cmb-count {
+  font-family: var(--ff-disp); font-size: 11px; font-weight: 700;
+  letter-spacing: .07em; text-transform: uppercase; color: rgba(255,255,255,.75);
+}
+.cmb-total { font-family: var(--ff-mono); font-size: 22px; font-weight: 700; color: #fff; line-height: 1; }
+.cmb-btn {
+  background: rgba(255,255,255,.2); border: 1px solid rgba(255,255,255,.35);
+  color: #fff; border-radius: var(--r-md); padding: 10px 16px;
+  font-family: var(--ff-disp); font-size: 13px; font-weight: 800;
+  letter-spacing: .04em; text-transform: uppercase;
+  cursor: pointer; white-space: nowrap; pointer-events: none;
+}
+
+/* ── CART BACKDROP ── */
+#cart-backdrop {
+  display: none; position: fixed; inset: 0; z-index: 195;
+  background: rgba(0,0,0,.45); opacity: 0;
+  transition: opacity 260ms;
+}
+#cart-backdrop.open { opacity: 1; }
+
+@media (max-width: 640px) {
+
+  /* ── SHOW MOBILE NAV ── */
+  #mobile-bottom-nav { display: flex; }
+  #cart-backdrop { display: block; }
+
+  /* ── TOP NAV: compact, hide tabs ── */
+  nav#topnav { height: 52px; padding: 0 12px; }
+  .nav-tab { display: none !important; }
+  .nav-brand { padding-right: 12px; gap: 8px; border-right: none; }
+  .nav-brand .logo { width: 30px; height: 30px; border-radius: 8px; }
+  .nav-brand .brand-name { font-size: 17px; }
+  .nav-brand .brand-sub { display: none; }
+  .mode-switcher { display: none; }
+  .nav-right { gap: 8px; margin-left: auto; }
+  .status-dot { display: none; }
+  .clock { display: none; }
+  .theme-toggle { width: 32px; height: 32px; font-size: 14px; }
+  #user-chip { font-size: 12px; }
+  #user-chip [onclick="doLogout()"] { display: none; }
+
+  /* ── CAJA BAR: compact ── */
+  #caja-bar { padding: 0 12px; height: 34px; gap: 8px; }
+  .caja-info { display: none; }
+
+  /* ── BODY: pad bottom for nav + mini bar ── */
+  #app { padding-bottom: 64px; }
+
+  /* ── COBRO: full width products ── */
+  #screen-cobro { flex-direction: column; overflow: hidden; position: relative; }
+  .cobro-left { flex: 1; min-height: 0; display: flex; flex-direction: column; border-right: none; }
+
+  /* ── CART PANEL: bottom sheet ── */
+  #cart-panel {
+    position: fixed !important;
+    left: 0; right: 0; bottom: 0;
+    width: 100% !important; max-height: 88vh !important;
+    border-left: none !important; border-top: none !important;
+    border-radius: 20px 20px 0 0;
+    box-shadow: 0 -8px 40px rgba(0,0,0,.18), 0 -2px 8px var(--accent-shadow);
+    z-index: 196;
+    transform: translateY(100%);
+    transition: transform 300ms cubic-bezier(.32,1,.64,1);
+    overflow-y: auto;
+    padding-bottom: env(safe-area-inset-bottom, 0px);
+  }
+  #cart-panel.cart-open {
+    transform: translateY(0);
+  }
+  /* Drag handle + close btn visible on mobile */
+  .cart-drag-handle {
+    display: block; width: 40px; height: 4px; border-radius: 2px;
+    background: var(--border-hi); margin: 10px auto 0;
+  }
+  .cart-sheet-close { display: flex !important; }
+
+  /* ── CART MINI BAR: shown when cart has items ── */
+  #cart-mini-bar { display: flex; bottom: 76px; }
+  #cart-mini-bar.hidden { display: none; }
+
+  /* ── SEARCH BAR ── */
+  .search-bar { padding: 8px 12px; gap: 6px; }
+  .search-wrap { height: 42px; padding: 0 10px; flex: 1; }
+  .scan-indicator { display: none; }
+
+  /* ── CATEGORY PILLS ── */
+  .cat-pills { padding: 6px 12px; gap: 5px; }
+  .pill { padding: 5px 12px; font-size: 12px; flex-shrink: 0; }
+
+  /* ── PRODUCT GRID ── */
+  .products-grid { grid-template-columns: repeat(2, 1fr); gap: 8px; padding: 8px 10px; }
+  .prod-card { min-height: 140px; }
+  .prod-card .prod-thumb-wrap { height: 72px; }
+  .prod-card .prod-emoji { font-size: 36px; width: 56px; height: 56px; }
+  .prod-card .prod-thumb { max-width: 60px; max-height: 60px; }
+  .prod-card .prod-name { font-size: 11px; }
+  .prod-card .prod-price { font-size: 13px; }
+  .prod-card .prod-stock { font-size: 10px; }
+
+  /* ── CART ITEMS ── */
+  .cart-header { padding: 12px 16px; }
+  .cart-title { font-size: 17px; }
+  .cart-items { max-height: 50vh; overflow-y: auto; }
+  .cart-item { padding: 10px 16px; gap: 10px; }
+  .ci-name { font-size: 14px; }
+  .qty-btn { width: 32px; height: 32px; font-size: 16px; }
+  .cart-footer { padding: 12px 16px; }
+  .summary-row .lbl { font-size: 13px; }
+  .summary-total .lbl { font-size: 16px; }
+  .summary-total .val { font-size: 22px; }
+  .pay-buttons { gap: 8px; }
+  .btn-pay { height: 52px; font-size: 16px; }
+
+  /* ── INVENTARIO ── */
+  .inv-toolbar {
+    flex-wrap: wrap; padding: 12px 12px 8px; gap: 6px; align-items: center;
+  }
+  .page-title { font-size: 22px; flex: 1; }
+  .inv-search-wrap { max-width: 100%; flex: 1 1 100%; order: 3; height: 40px; }
+  /* Hide bulky secondary buttons on mobile, keep essential ones */
+  #btn-importar-factura { display: none !important; }
+  #btn-pedido { display: none !important; }
+  .btn-view-toggle { display: none; }
+  .btn-primary { height: 40px; font-size: 14px; padding: 0 14px; }
+  .btn-secondary { height: 38px; font-size: 12px; padding: 0 10px; }
+  .inv-stats {
+    overflow-x: auto; -webkit-overflow-scrolling: touch;
+    flex-wrap: nowrap; gap: 0;
+  }
+  .stat-chip { padding: 10px 14px; flex-shrink: 0; }
+  .stat-chip .sc-val { font-size: 18px; }
+  /* Force cards view on mobile */
+  .inv-table-wrap { display: none !important; }
+  .inv-cards-grid { display: grid !important; grid-template-columns: repeat(2, 1fr); gap: 10px; padding: 12px; }
+  .inv-card { padding: 12px 12px 9px; }
+  .inv-card-emoji { font-size: 22px; }
+  .inv-card-name { font-size: 13px; }
+
+  /* ── REPORTES ── */
+  .rep-header { flex-wrap: wrap; padding: 14px 12px 10px; gap: 8px; }
+  .rep-header .page-title { font-size: 22px; width: 100%; }
+  .period-tabs { margin-left: 0; }
+  .rep-sidebar { display: none; }
+  .kpi-grid { grid-template-columns: repeat(2, 1fr); padding: 12px; }
+  .kpi-card { padding: 14px 14px; }
+  .kpi-value { font-size: 24px; }
+  .tx-item { padding: 10px 12px; gap: 8px; }
+  .tx-header { padding: 10px 12px; }
+  .tx-num { width: 32px; }
+  .tx-amount { font-size: 14px; width: 72px; }
+
+  /* ── MODALS: bottom sheet ── */
+  .modal-overlay { align-items: flex-end; }
+  .modal { border-radius: var(--r-lg) var(--r-lg) 0 0; max-height: 93vh; width: 100%; max-width: 100%; }
+  .modal-header { padding: 16px 18px 14px; }
+  .pay-modal-body { padding: 16px 18px; }
+  .pay-total-big { font-size: 34px; margin-bottom: 16px; }
+  .pay-methods { gap: 6px; }
+  .pay-method-btn { height: 52px; font-size: 15px; }
+  .btn-cobrar { height: 56px; font-size: 18px; }
+  .prod-form { padding: 14px 16px; gap: 10px; overflow-y: auto; }
+  .form-actions { padding: 0 16px 20px; }
+  .form-actions .btn-cancel { display: none; }
+  .form-actions .btn-save { flex: 1; height: 52px; font-size: 17px; }
+  .form-row { flex-direction: column; gap: 10px; }
+  .receipt { padding: 18px; }
+  .receipt-actions { grid-template-columns: 1fr 1fr; padding: 0 18px 18px; gap: 8px; }
+  .btn-nueva-venta { width: calc(100% - 24px); margin: 0 12px 16px; height: 50px; font-size: 16px; }
+  .btn-cerrar-caja { width: calc(100% - 24px); margin: 0 12px 12px; }
+
+  /* ── SA PAGE: compact ── */
+  #screen-superadmin .sa-wrap { padding: 16px; }
+  .sa-page-title { font-size: 22px; }
+  .sa-table { font-size: 13px; }
+  .sa-table td { padding: 10px 10px; }
+  .sa-table thead th { padding: 8px 10px; }
 }
 
 /* ══════════════════════════════════════════
@@ -1469,13 +1712,14 @@ table.inv-table {
   <nav id="topnav">
     <div class="nav-brand">
       <div class="logo">
-        <!-- Ícono recibo AESSPOS — Stitch "The Digital Ledger" -->
-        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 28" width="20" height="23" fill="none" aria-hidden="true">
-          <path d="M2 0h20v24l-2-1.5-2 1.5-2-1.5-2 1.5-2-1.5-2 1.5-2-1.5-2 1.5V0z" fill="rgba(255,255,255,.25)"/>
-          <rect x="5" y="5" width="14" height="1.8" rx=".9" fill="white" opacity=".9"/>
-          <rect x="5" y="9" width="10" height="1.8" rx=".9" fill="white" opacity=".7"/>
-          <rect x="5" y="13" width="12" height="1.8" rx=".9" fill="white" opacity=".7"/>
-          <rect x="5" y="17" width="8" height="2" rx="1" fill="white" opacity=".95"/>
+        <!-- favicon.svg — logo oficial AESSPOS -->
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 34 42" fill="none" width="22" height="27" aria-hidden="true">
+          <path d="M0 4 Q0 0 4 0 H30 Q34 0 34 4 V38 Q31 35 28 38 Q25 41 22 38 Q19 35 16 38 Q13 41 10 38 Q7 35 4 38 Q1 41 0 38 Z" fill="rgba(255,255,255,.3)"/>
+          <rect x="6" y="10" width="22" height="2" rx="1" fill="white" opacity="0.85"/>
+          <rect x="6" y="15" width="16" height="2" rx="1" fill="white" opacity="0.7"/>
+          <rect x="6" y="20" width="19" height="2" rx="1" fill="white" opacity="0.7"/>
+          <rect x="6" y="25" width="22" height="1" rx="0.5" fill="white" opacity="0.45"/>
+          <rect x="6" y="28" width="22" height="3.5" rx="1.5" fill="white"/>
         </svg>
       </div>
       <div>
@@ -1541,13 +1785,17 @@ table.inv-table {
       <div class="cat-pills" id="cat-pills"></div>
       <div class="products-grid" id="products-grid"></div>
     </div>
-    <div class="cobro-right">
+    <div class="cobro-right" id="cart-panel">
+      <div class="cart-drag-handle" onclick="closeCartSheet()"></div>
       <div class="cart-header">
         <div style="display:flex;align-items:center;gap:8px">
           <span class="cart-title">Pedido</span>
           <span class="cart-count" id="cart-count">0</span>
         </div>
-        <button class="btn-clear" onclick="clearCart()">Limpiar</button>
+        <div style="display:flex;align-items:center;gap:8px;">
+          <button class="btn-close cart-sheet-close" onclick="closeCartSheet()" title="Cerrar">✕</button>
+          <button class="btn-clear" onclick="clearCart()">Limpiar</button>
+        </div>
       </div>
       <div class="cart-items" id="cart-items">
         <div class="cart-empty">
@@ -1729,6 +1977,34 @@ table.inv-table {
     </div>
     <div id="usuarios-list">Cargando...</div>
   </div>
+
+  <!-- MOBILE: CART BACKDROP -->
+  <div id="cart-backdrop" onclick="closeCartSheet()"></div>
+
+  <!-- MOBILE: CART MINI BAR -->
+  <div id="cart-mini-bar" onclick="openCartSheet()">
+    <div class="cmb-info">
+      <span class="cmb-count" id="cmb-count">0 ítems</span>
+      <span class="cmb-total" id="cmb-total">$0</span>
+    </div>
+    <button class="cmb-btn">Ver carrito →</button>
+  </div>
+
+  <!-- MOBILE: BOTTOM NAV -->
+  <nav id="mobile-bottom-nav">
+    <button class="mbn-tab active" id="mbn-cobro" onclick="switchScreen('cobro')">
+      <span class="mbn-icon">🛒</span><span class="mbn-label">Cobro</span>
+    </button>
+    <button class="mbn-tab" id="mbn-inventario" onclick="switchScreen('inventario')" style="display:none">
+      <span class="mbn-icon">📦</span><span class="mbn-label">Inventario</span>
+    </button>
+    <button class="mbn-tab" id="mbn-reportes" onclick="switchScreen('reportes')" style="display:none">
+      <span class="mbn-icon">📊</span><span class="mbn-label">Reportes</span>
+    </button>
+    <button class="mbn-tab" id="mbn-usuarios" onclick="switchScreen('usuarios')" style="display:none">
+      <span class="mbn-icon">👥</span><span class="mbn-label">Usuarios</span>
+    </button>
+  </nav>
 
 </div><!-- #app -->
 
@@ -2544,11 +2820,35 @@ function switchScreen(name) {
   document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
   document.querySelectorAll('.nav-tab').forEach(t => t.classList.remove('active'));
   document.getElementById('screen-' + name).classList.add('active');
-  document.querySelector(`[data-screen="${name}"]`).classList.add('active');
+  const topTab = document.querySelector(`[data-screen="${name}"]`);
+  if (topTab) topTab.classList.add('active');
+  // Sync mobile bottom nav
+  document.querySelectorAll('.mbn-tab').forEach(t => t.classList.remove('active'));
+  const mbnTab = document.getElementById('mbn-' + name);
+  if (mbnTab) mbnTab.classList.add('active');
+  // Close cart sheet when leaving cobro
+  if (name !== 'cobro') closeCartSheet();
   if (name === 'inventario') renderInventario();
   if (name === 'reportes') renderReportes();
   if (name === 'cobro') document.getElementById('search-input').focus();
   if (name === 'usuarios') renderPanelUsuarios();
+}
+
+function openCartSheet() {
+  if (!cart.length) return;
+  document.getElementById('cart-panel').classList.add('cart-open');
+  document.getElementById('cart-backdrop').classList.add('open');
+  document.body.style.overflow = 'hidden';
+}
+
+function closeCartSheet() {
+  document.getElementById('cart-panel').classList.remove('cart-open');
+  document.getElementById('cart-backdrop').classList.remove('open');
+  document.body.style.overflow = '';
+}
+
+function closeCartSheetBackdrop(e) {
+  if (e.target === e.currentTarget) closeCartSheet();
 }
 
 // ─── RELOJ ────────────────────────────────────
@@ -3000,6 +3300,19 @@ function renderCart() {
   document.getElementById('cart-count').textContent = cart.length;
   document.getElementById('cart-qty-total').textContent = `${qty} ítem${qty!==1?'s':''}`;
   document.getElementById('cart-total').textContent = fmt(total);
+
+  // Mobile mini bar
+  const miniBar = document.getElementById('cart-mini-bar');
+  if (miniBar) {
+    if (cart.length > 0) {
+      miniBar.classList.remove('hidden');
+      document.getElementById('cmb-count').textContent = `${qty} ítem${qty!==1?'s':''}`;
+      document.getElementById('cmb-total').textContent = fmt(total);
+    } else {
+      miniBar.classList.add('hidden');
+      closeCartSheet();
+    }
+  }
 
   if (!cart.length) {
     container.innerHTML = `<div class="cart-empty"><div class="empty-icon">🛒</div><p>Carrito vacío</p></div>`;
@@ -3999,6 +4312,10 @@ function setMode(mode) {
   document.getElementById('tab-cobro').style.display      = isCajero ? '' : 'none';
   document.getElementById('tab-inventario').style.display = isCajero ? 'none' : '';
   document.getElementById('tab-reportes').style.display   = isCajero ? 'none' : '';
+  // Mobile bottom nav tabs
+  document.getElementById('mbn-cobro').style.display      = isCajero ? '' : 'none';
+  document.getElementById('mbn-inventario').style.display = isCajero ? 'none' : '';
+  document.getElementById('mbn-reportes').style.display   = isCajero ? 'none' : '';
 
   // Barra de caja solo en modo cajero
   document.getElementById('caja-bar').className = isCajero ? 'visible' : '';
