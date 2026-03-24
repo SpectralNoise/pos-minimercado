@@ -983,9 +983,30 @@ table.inv-table {
 .cam-footer {
   padding: 16px 18px 32px; background: rgba(0,0,0,.7);
   text-align: center; flex-shrink: 0;
+  display: flex; flex-direction: column; align-items: center; gap: 14px;
 }
 .cam-status { color: #fff; font-size: 14px; font-family: var(--ff-body); opacity: .85; }
 .cam-detected { color: #4ade80; font-weight: 700; font-size: 16px; }
+/* Botón cerrar escáner (modo continuo) */
+.cam-close-btn {
+  width: 100%; max-width: 280px; height: 52px;
+  background: rgba(255,255,255,.12); border: 1.5px solid rgba(255,255,255,.3);
+  color: #fff; border-radius: var(--r-md);
+  font-family: var(--ff-disp); font-size: 16px; font-weight: 800;
+  letter-spacing: .04em; text-transform: uppercase; cursor: pointer;
+  transition: background 120ms;
+}
+.cam-close-btn:active { background: rgba(255,255,255,.22); transform: scale(.97); }
+/* Contador de productos escaneados (sobre el video) */
+.cam-count-badge {
+  position: absolute; top: 14px; left: 50%; transform: translateX(-50%);
+  background: rgba(0,0,0,.65); backdrop-filter: blur(6px);
+  border: 1.5px solid rgba(74,222,128,.5);
+  color: #4ade80; border-radius: 99px;
+  font-family: var(--ff-disp); font-size: 13px; font-weight: 800;
+  letter-spacing: .05em; padding: 5px 16px; white-space: nowrap;
+  pointer-events: none;
+}
 .btn-cancel {
   flex: 1; height: 44px; background: var(--surf-2); border: 1px solid var(--border);
   border-radius: var(--r-md); color: var(--text-2); font-family: var(--ff-disp);
@@ -2052,6 +2073,7 @@ button:not(:disabled):active {
       <div class="inv-search-wrap">
         <span>🔍</span>
         <input type="text" id="inv-search" placeholder="Buscar producto..." autocomplete="off">
+        <button class="btn-cam-scan-sm" onclick="openCameraScanner('inv-search')" title="Buscar por código de barras">📷</button>
       </div>
       <button class="btn-secondary" onclick="exportCSV()">⬇ CSV</button>
       <button class="btn-secondary" id="btn-importar-factura" onclick="abrirModalFactura()" title="Importar factura de proveedor con IA (Plan Pro)">📄 <span class="btn-factura-label">Importar factura</span></button>
@@ -2683,9 +2705,15 @@ button:not(:disabled):active {
         <div class="cam-reticle-line"></div>
       </div>
     </div>
+    <!-- Contador visible sobre el video en modo cobro continuo -->
+    <div class="cam-count-badge" id="cam-count-badge" style="display:none;"></div>
   </div>
   <div class="cam-footer">
     <div class="cam-status" id="cam-status">Iniciando cámara...</div>
+    <!-- Botón cerrar escáner: visible solo en modo continuo (cobro) -->
+    <button class="cam-close-btn" id="cam-close-btn" onclick="closeCameraScanner()" style="display:none;">
+      Cerrar escáner
+    </button>
   </div>
 </div>
 
@@ -3284,18 +3312,32 @@ document.addEventListener('keydown', function(e) {
 
 // ─── SCANNER DE CÁMARA ─────────────────────────
 let _camStream = null;
-let _camFrame  = null;
-let _camMode   = null;   // 'cobro' | 'inventario'
+let _camFrame        = null;
+let _camMode         = null;   // 'cobro' | 'inventario' | 'inv-search'
+let _camScanCount    = 0;      // contador de productos escaneados en modo cobro
+let _lastScanCode    = null;   // último código detectado (para debounce)
+let _lastScanTime    = 0;      // timestamp del último scan
+const _CAM_DEBOUNCE  = 2000;   // ms entre scans del mismo código
 
 async function openCameraScanner(mode) {
   _camMode = mode;
-  const overlay = document.getElementById('cam-overlay');
-  const status  = document.getElementById('cam-status');
+  _camScanCount = 0;
+  _lastScanCode = null;
+  const overlay   = document.getElementById('cam-overlay');
+  const status    = document.getElementById('cam-status');
+  const closeBtnEl = document.getElementById('cam-close-btn');
+  const countBadge = document.getElementById('cam-count-badge');
 
   if (!('BarcodeDetector' in window)) {
     showToast('⚠ Tu navegador no soporta escaneo por cámara. Usa Chrome.');
     return;
   }
+
+  // Modo cobro: mostrar botón "Cerrar escáner" y badge contador
+  const isContinuous = (mode === 'cobro');
+  closeBtnEl.style.display  = isContinuous ? 'block' : 'none';
+  countBadge.style.display  = isContinuous ? 'block' : 'none';
+  countBadge.textContent    = '0 productos agregados';
 
   overlay.classList.add('open');
   status.textContent = 'Iniciando cámara...';
@@ -3321,13 +3363,36 @@ async function openCameraScanner(mode) {
         const results = await detector.detect(video);
         if (results.length > 0) {
           const code = results[0].rawValue;
-          status.textContent = `✅ Detectado: ${code}`;
-          status.className   = 'cam-detected';
-          setTimeout(() => {
-            closeCameraScanner();
-            _processScan(code);
-          }, 300);
-          return;
+          const now  = Date.now();
+          const isDupe = (code === _lastScanCode && now - _lastScanTime < _CAM_DEBOUNCE);
+
+          if (!isDupe) {
+            _lastScanCode = code;
+            _lastScanTime = now;
+            status.textContent = `✅ ${code}`;
+            status.className   = 'cam-detected';
+
+            if (isContinuous) {
+              // Modo cobro: procesar sin cerrar, actualizar contador
+              _processScan(code);
+              _camScanCount++;
+              countBadge.textContent = `${_camScanCount} producto${_camScanCount !== 1 ? 's' : ''} agregado${_camScanCount !== 1 ? 's' : ''}`;
+              // Volver al estado "listo" tras 1.2s
+              setTimeout(() => {
+                if (_camStream) {
+                  status.textContent = 'Apunta al siguiente código...';
+                  status.className   = 'cam-status';
+                }
+              }, 1200);
+            } else {
+              // Modos no-continuos: cerrar tras escanear
+              setTimeout(() => {
+                closeCameraScanner();
+                _processScan(code);
+              }, 350);
+              return; // detener loop
+            }
+          }
         }
       } catch {}
       _camFrame = requestAnimationFrame(loop);
@@ -3346,6 +3411,8 @@ function closeCameraScanner() {
   const video = document.getElementById('cam-video');
   if (video) video.srcObject = null;
   document.getElementById('cam-overlay').classList.remove('open');
+  if (_camScanCount > 0) showToast(`🛒 ${_camScanCount} producto${_camScanCount !== 1 ? 's' : ''} agregado${_camScanCount !== 1 ? 's' : ''}`, 'success');
+  _camScanCount = 0;
 }
 
 // ─── OPEN FOOD FACTS LOOKUP ────────────────────────────────────────
@@ -3472,20 +3539,35 @@ function _updateMargenHint() {
 }
 
 function _processScan(barcode) {
-  // ① Si el modal de producto está abierto (inventario) → llenar campo barcode
+  // ① Modal de producto abierto → llenar campo barcode
   if (document.getElementById('modal-producto').classList.contains('open')) {
     const field = document.getElementById('prod-barcode');
     field.value = barcode;
     field.classList.add('scanned');
     setTimeout(() => field.classList.remove('scanned'), 500);
     showToast(`📦 Código leído: ${barcode}`);
-    // Auto-buscar en Open Food Facts si el nombre está vacío
     const nameEl = document.getElementById('prod-name');
     if (!nameEl.value) lookupFillModal(barcode);
     return;
   }
 
-  // ② Pantalla de cobro → buscar producto y agregar al carrito
+  // ② Modo búsqueda en inventario → filtrar lista
+  if (_camMode === 'inv-search') {
+    const invSearch = document.getElementById('inv-search');
+    if (invSearch) {
+      invSearch.value = barcode;
+      invSearch.dispatchEvent(new Event('input'));
+    }
+    const found = products.find(p => p.barcode === barcode);
+    if (found) {
+      showToast(`✅ ${found.emoji} ${found.name} encontrado`, 'success');
+    } else {
+      showToast(`⚠ Código ${barcode} no está en inventario`, 'warn');
+    }
+    return;
+  }
+
+  // ③ Pantalla de cobro → agregar al carrito
   const product = products.find(p => p.barcode === barcode);
   if (!product) {
     lookupAndOffer(barcode);
@@ -3496,7 +3578,6 @@ function _processScan(barcode) {
     return;
   }
   addToCart(product.id);
-  // Flash rápido en el campo de búsqueda para confirmar visualmente
   const si = document.getElementById('search-input');
   if (si) {
     si.value = `✓ ${product.name}`;
