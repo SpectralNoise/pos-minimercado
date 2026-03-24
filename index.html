@@ -1230,8 +1230,9 @@ table.inv-table {
   display: none; position: fixed; inset: 0; z-index: 195;
   background: rgba(0,0,0,.45); opacity: 0;
   transition: opacity 260ms;
+  pointer-events: none; /* ← FIX: no bloquear clicks cuando está invisible */
 }
-#cart-backdrop.open { opacity: 1; }
+#cart-backdrop.open { opacity: 1; pointer-events: auto; }
 
 @media (max-width: 640px) {
 
@@ -1671,6 +1672,161 @@ table.inv-table {
   .inv-card-price { font-size: 13px; }
 }
 
+/* ══════════════════════════════════════════
+   STITCH UI POLISH — v3
+   Botones · Modales · Super Admin · Mobile Logout
+══════════════════════════════════════════ */
+
+/* ── 1. LOGOUT LABEL (hidden on desktop, shown on mobile) ── */
+.logout-label { display: none; }
+.btn-logout {
+  display: flex; align-items: center; justify-content: center; gap: 4px;
+}
+
+/* ── 2. UNIVERSAL BUTTON PRESS FEEDBACK ── */
+/* Todos los botones dan feedback visual al presionar — Stitch "tactile" rule */
+button:not(:disabled):active {
+  transform: scale(.95);
+  transition: transform 60ms cubic-bezier(.4,0,.2,1) !important;
+}
+/* Mode buttons — feedback más pronunciado */
+.mode-btn:active { transform: scale(.92) !important; }
+/* SA table rows */
+.sa-table tbody tr:active { background: var(--surf-4) !important; }
+
+/* ── 3. MODAL IMPROVEMENTS — Stitch "The Digital Ledger" ── */
+/* Stripe ámbar + header tonal */
+.modal-header {
+  background: var(--surf-2);
+  border-top: 3px solid var(--accent);
+  border-radius: var(--r-lg) var(--r-lg) 0 0;
+}
+/* Modal body: fondo diferenciado */
+.modal-body {
+  background: var(--surf-1);
+}
+/* Modal footer: CTA gradiente */
+.modal-footer .btn-primary,
+.form-actions .btn-save,
+.form-actions .btn-primary {
+  background: linear-gradient(135deg, var(--accent) 0%, var(--accent-hi) 100%);
+  box-shadow: 0 3px 12px var(--accent-shadow);
+  color: #fff;
+}
+.modal-footer .btn-primary:hover,
+.form-actions .btn-save:hover { box-shadow: 0 5px 18px var(--accent-shadow); }
+
+/* Form inputs: mejora touch targets para mobile */
+.form-input, select.form-input { min-height: 44px; }
+
+/* Cerrar modal: feedback visual */
+.btn-close:active, .modal-close:active {
+  background: rgba(220,38,38,.08);
+  border-color: rgba(220,38,38,.3);
+  color: var(--danger);
+  transform: scale(.9);
+}
+
+/* ── 4. SUPER ADMIN — Stitch redesign ── */
+/* Header de página con borde ámbar izquierdo */
+.sa-page-header {
+  padding-bottom: 24px;
+  border-bottom: 1px solid var(--border);
+  margin-bottom: 24px;
+}
+.sa-page-title {
+  position: relative; padding-left: 16px;
+}
+.sa-page-title::before {
+  content: '';
+  position: absolute; left: 0; top: 2px; bottom: 2px;
+  width: 4px; border-radius: 2px;
+  background: linear-gradient(180deg, var(--accent) 0%, var(--accent-hi) 100%);
+}
+/* Nueva tienda CTA */
+.sa-page-header .btn-primary {
+  background: linear-gradient(135deg, var(--accent) 0%, var(--accent-hi) 100%);
+  color: #fff; box-shadow: 0 3px 12px var(--accent-shadow);
+  font-size: 13px; padding: 0 18px; height: 38px;
+  border-radius: var(--r-md); border: none;
+  font-family: var(--ff-disp); font-weight: 800;
+  letter-spacing: .05em; text-transform: uppercase;
+  cursor: pointer; transition: all var(--trans);
+  display: inline-flex; align-items: center; gap: 6px;
+}
+.sa-page-header .btn-primary:hover { box-shadow: 0 5px 20px var(--accent-shadow); }
+.sa-page-header .btn-primary:active { transform: scale(.95); }
+
+/* Section header: ícono de tabla */
+.sa-section {
+  border-radius: var(--r-lg);
+  box-shadow: 0 2px 8px var(--accent-shadow), 0 1px 2px rgba(0,0,0,.04);
+}
+.sa-section-header {
+  border-bottom: 1px solid var(--border);
+}
+/* Table: mejor alternancia */
+.sa-table tbody tr:nth-child(even) {
+  background: var(--surf-2);
+}
+.sa-table tbody tr:nth-child(even):hover { background: var(--surf-3); }
+/* Action buttons con mejor espaciado */
+.sa-actions { gap: 5px; }
+.sa-btn {
+  height: 30px; border-radius: var(--r-sm);
+  font-size: 11px; white-space: nowrap;
+}
+/* VER → button: more prominent */
+.sa-btn.go {
+  background: var(--accent-bg);
+  border-color: var(--accent-brd);
+  color: var(--accent);
+}
+.sa-btn.go:hover {
+  background: var(--accent); color: #fff;
+  box-shadow: 0 2px 8px var(--accent-shadow);
+}
+/* Eliminar: más llamativo */
+.sa-btn.del { font-weight: 800; }
+.sa-btn.del:active { transform: scale(.92); }
+
+/* SA mobile: scroll horizontal en tabla */
+@media (max-width: 640px) {
+  .sa-section { border-radius: var(--r-md); }
+  #screen-superadmin .sa-wrap { padding: 16px; }
+  .sa-page-title { font-size: 20px; padding-left: 12px; }
+  .sa-table-scroll { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+  .sa-table { min-width: 500px; font-size: 12px; }
+  .sa-table td { padding: 10px 10px; }
+  .sa-table thead th { padding: 8px 10px; font-size: 10px; }
+  .sa-actions { flex-wrap: nowrap; gap: 3px; }
+  .sa-btn { height: 26px; padding: 0 8px; font-size: 10px; }
+}
+
+/* ── 5. MOBILE: logout button con texto "Salir" ── */
+@media (max-width: 640px) {
+  /* Mostrar label "Salir" en mobile */
+  .logout-label {
+    display: inline;
+    font-family: var(--ff-disp); font-size: 12px; font-weight: 800;
+    letter-spacing: .04em; text-transform: uppercase;
+  }
+  /* Pill shape para el botón de logout en mobile */
+  .btn-logout {
+    width: auto; height: 32px; border-radius: 99px;
+    padding: 0 10px 0 8px; gap: 4px;
+    background: rgba(220,38,38,.06);
+    border: 1px solid rgba(220,38,38,.2);
+    font-size: 13px;
+  }
+  .btn-logout:active { transform: scale(.9); background: rgba(220,38,38,.14); }
+  /* User chip en mobile: mostrar completo con logout visible */
+  .user-chip {
+    padding: 3px 3px 3px 6px; gap: 6px;
+    background: var(--surf-2); border-radius: 99px;
+  }
+}
+
 /* ── IMPRESIÓN TÉRMICA ─────────────────────────────────────── */
 @media print {
   /* Ocultar todo excepto el recibo */
@@ -1807,7 +1963,7 @@ table.inv-table {
       <div id="user-chip" class="user-chip" style="display:none;">
         <div class="user-avatar" id="user-chip-avatar">?</div>
         <span class="user-chip-name" id="user-chip-name"></span>
-        <button class="btn-logout" onclick="doLogout()" title="Cerrar sesión">⏻</button>
+        <button class="btn-logout" onclick="doLogout()" title="Cerrar sesión"><span class="logout-icon">⏻</span><span class="logout-label">Salir</span></button>
       </div>
       <button id="btn-install-pwa" onclick="installPWA()" title="Instalar app" style="display:none;align-items:center;gap:4px;padding:4px 10px;border-radius:20px;border:1px solid var(--accent);background:var(--accent-bg);color:var(--accent);font-size:12px;font-weight:600;cursor:pointer;">⬇ Instalar</button>
       <button class="theme-toggle" id="theme-toggle" onclick="toggleTheme()" title="Cambiar tema"></button>
