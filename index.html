@@ -706,6 +706,65 @@ table.inv-table {
 }
 .btn-close:hover { border-color: var(--border-hi); color: var(--text); }
 
+/* ── MODAL UNIFIED COMPONENT STYLES ── */
+/* Aliases so all modals (SA, usuarios, tiendas) look identical to product modal */
+.modal-title {
+  font-family: var(--ff-disp); font-size: 20px; font-weight: 800;
+  letter-spacing: .04em; text-transform: uppercase; color: var(--text);
+}
+.modal-close {
+  width: 32px; height: 32px; border-radius: 50%;
+  background: var(--surf-3); border: 1px solid var(--border);
+  color: var(--text-2); cursor: pointer; font-size: 15px;
+  display: flex; align-items: center; justify-content: center;
+  transition: all var(--trans); flex-shrink: 0;
+}
+.modal-close:hover { border-color: var(--border-hi); color: var(--text); }
+.modal-body {
+  padding: 20px 24px;
+  display: flex; flex-direction: column; gap: 14px;
+}
+.modal-footer {
+  padding: 16px 24px 20px;
+  display: flex; justify-content: flex-end; gap: 8px;
+  border-top: 1px solid var(--border);
+}
+.form-label {
+  font-size: 12px; text-transform: uppercase; letter-spacing: .07em;
+  color: var(--text-2); font-family: var(--ff-disp); font-weight: 600;
+}
+
+/* ── USER CHIP & LOGOUT BUTTON — Stitch "The Digital Ledger" ── */
+.user-chip {
+  display: flex; align-items: center; gap: 8px;
+  padding: 4px 4px 4px 4px;
+  border-radius: 99px;
+  background: var(--surf-2); border: 1px solid var(--border);
+  transition: border-color var(--trans);
+}
+.user-chip:hover { border-color: var(--border-hi); }
+.user-avatar {
+  width: 30px; height: 30px; border-radius: 50%; flex-shrink: 0;
+  background: linear-gradient(135deg, var(--accent) 0%, var(--accent-hi) 100%);
+  display: flex; align-items: center; justify-content: center;
+  font-family: var(--ff-disp); font-size: 13px; font-weight: 800;
+  color: #fff; text-transform: uppercase; letter-spacing: .02em;
+  box-shadow: 0 2px 8px var(--accent-shadow);
+}
+.user-chip-name {
+  font-size: 13px; font-weight: 600; color: var(--text);
+  max-width: 100px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.btn-logout {
+  width: 30px; height: 30px; border-radius: 50%; flex-shrink: 0;
+  background: transparent; border: 1px solid rgba(220,38,38,.25);
+  color: var(--danger); cursor: pointer; font-size: 14px;
+  display: flex; align-items: center; justify-content: center;
+  transition: all var(--trans); margin-right: 2px;
+}
+.btn-logout:hover { background: rgba(220,38,38,.08); border-color: rgba(220,38,38,.5); }
+.btn-logout:active { transform: scale(.9); }
+
 /* PAGO modal */
 .pay-modal-body { padding: 20px 24px; }
 .pay-label { font-size: 12px; text-transform: uppercase; letter-spacing: .08em; color: var(--text-2); margin-bottom: 6px; font-family: var(--ff-disp); font-weight: 600; }
@@ -1192,8 +1251,8 @@ table.inv-table {
   .status-dot { display: none; }
   .clock { display: none; }
   .theme-toggle { width: 32px; height: 32px; font-size: 14px; }
-  #user-chip { font-size: 12px; }
-  #user-chip [onclick="doLogout()"] { display: none; }
+  .user-chip-name { display: none; }
+  .user-chip { padding: 3px; gap: 2px; }
 
   /* ── CAJA BAR: compact ── */
   #caja-bar { padding: 0 12px; height: 34px; gap: 8px; }
@@ -1309,6 +1368,8 @@ table.inv-table {
   .modal-overlay { align-items: flex-end; }
   .modal { border-radius: var(--r-lg) var(--r-lg) 0 0; max-height: 93vh; width: 100%; max-width: 100%; }
   .modal-header { padding: 16px 18px 14px; }
+  .modal-body { padding: 16px 18px; gap: 12px; }
+  .modal-footer { padding: 12px 18px 20px; }
   .pay-modal-body { padding: 16px 18px; }
   .pay-total-big { font-size: 34px; margin-bottom: 16px; }
   .pay-methods { gap: 6px; }
@@ -1743,9 +1804,10 @@ table.inv-table {
         <button class="mode-btn cajero active" id="mode-cajero" onclick="setMode('cajero')">🛒 Cajero</button>
         <button class="mode-btn" id="mode-admin" onclick="setMode('admin')">⚙ Admin</button>
       </div>
-      <div id="user-chip" style="display:none; align-items:center; gap:8px; font-size:13px; color:var(--text-2);">
-        <span id="user-chip-name" style="font-weight:600; color:var(--text);"></span>
-        <button onclick="doLogout()" style="background:none;border:1px solid var(--border);border-radius:6px;cursor:pointer;font-size:12px;font-weight:600;padding:4px 10px;color:var(--text-2);">Salir</button>
+      <div id="user-chip" class="user-chip" style="display:none;">
+        <div class="user-avatar" id="user-chip-avatar">?</div>
+        <span class="user-chip-name" id="user-chip-name"></span>
+        <button class="btn-logout" onclick="doLogout()" title="Cerrar sesión">⏻</button>
       </div>
       <button id="btn-install-pwa" onclick="installPWA()" title="Instalar app" style="display:none;align-items:center;gap:4px;padding:4px 10px;border-radius:20px;border:1px solid var(--accent);background:var(--accent-bg);color:var(--accent);font-size:12px;font-weight:600;cursor:pointer;">⬇ Instalar</button>
       <button class="theme-toggle" id="theme-toggle" onclick="toggleTheme()" title="Cambiar tema"></button>
@@ -4541,6 +4603,7 @@ async function iniciarApp(user, tienda) {
   // Mostrar chip de usuario
   const chip = document.getElementById('user-chip');
   document.getElementById('user-chip-name').textContent = user.nombre;
+  document.getElementById('user-chip-avatar').textContent = (user.nombre || '?')[0].toUpperCase();
   chip.style.display = 'flex';
   // Mostrar app, ocultar login
   document.getElementById('login-screen').style.display = 'none';
