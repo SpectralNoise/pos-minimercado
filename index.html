@@ -2623,11 +2623,19 @@ button:not(:disabled):active {
           Sube una foto de la factura del proveedor. La IA extrae los productos, cantidades y precios.<br>
           <strong>Productos existentes</strong> → se actualiza el stock. <strong>Productos nuevos</strong> → se crean automáticamente.
         </p>
-        <div class="photo-zone" id="factura-zone" onclick="document.getElementById('factura-img-input').click()" style="height:140px">
-          <input type="file" id="factura-img-input" accept="image/*" capture="environment" style="display:none" onchange="onFacturaImageSelected(event)">
-          <div class="ph-icon">📷</div>
-          <div class="ph-label">Foto o archivo de la factura</div>
-          <div class="ph-sub">JPG, PNG, HEIC — hasta 5 MB</div>
+        <!-- inputs ocultos -->
+        <input type="file" id="factura-img-input" accept="image/*" style="display:none" onchange="onFacturaImageSelected(event)">
+        <input type="file" id="factura-cam-input" accept="image/*" capture="environment" style="display:none" onchange="onFacturaImageSelected(event)">
+
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:4px">
+          <button class="btn-secondary" onclick="document.getElementById('factura-cam-input').click()" style="height:80px;flex-direction:column;gap:6px;display:flex;align-items:center;justify-content:center;border-radius:var(--r-md)">
+            <span style="font-size:26px">📷</span>
+            <span style="font-size:12px;font-weight:700">Tomar foto</span>
+          </button>
+          <button class="btn-secondary" onclick="document.getElementById('factura-img-input').click()" style="height:80px;flex-direction:column;gap:6px;display:flex;align-items:center;justify-content:center;border-radius:var(--r-md)">
+            <span style="font-size:26px">🖼️</span>
+            <span style="font-size:12px;font-weight:700">Galería / Archivo</span>
+          </button>
         </div>
         <div id="factura-preview-wrap" style="display:none;margin-top:12px">
           <img id="factura-preview-img" style="max-height:200px;border-radius:8px;border:1px solid var(--border);display:block">

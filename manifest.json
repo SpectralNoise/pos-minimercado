@@ -1,6 +1,6 @@
 {
-  "name": "POS Mini Mercado",
-  "short_name": "POS",
+  "name": "AESSPOS",
+  "short_name": "AESSPOS",
   "description": "Sistema de punto de venta para mini mercado",
   "start_url": "/",
   "display": "standalone",
