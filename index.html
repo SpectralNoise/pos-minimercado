@@ -1230,10 +1230,127 @@ table.inv-table {
 /* ── PAGO: cambio positivo en verde ── */
 .cambio-positive { color: var(--success) !important; }
 
-/* ── FEEDBACK TÁCTIL BOTONES ── */
+/* ── FEEDBACK TÁCTIL BOTONES (global) ── */
 .btn-primary:active,
 .btn-save:active,
 .btn-cobrar:active { transform: scale(.97); }
+
+.btn-secondary:active,
+.btn-clear:active,
+.btn-close:active,
+.btn-icon:active,
+.btn-cancel:active,
+.btn-receipt:active,
+.btn-apertura:active,
+.btn-cerrar-caja:active,
+.btn-cam-scan:active,
+.btn-cam-scan-sm:active,
+.btn-pay:active,
+.btn-nueva-venta:active,
+.btn-view-toggle:active,
+.pay-method-btn:active,
+.modal-close:active { transform: scale(.95); }
+
+/* ── SUPER ADMIN PANEL ── */
+#screen-superadmin .sa-wrap { padding: 32px 28px; max-width: 900px; }
+.sa-page-header {
+  display: flex; align-items: flex-start; justify-content: space-between;
+  margin-bottom: 28px; gap: 16px; flex-wrap: wrap;
+}
+.sa-page-title {
+  font-family: var(--ff-disp); font-size: 28px; font-weight: 800;
+  letter-spacing: -.01em; color: var(--text); line-height: 1;
+}
+.sa-page-sub { font-size: 14px; color: var(--text-2); margin-top: 6px; }
+.sa-section {
+  background: var(--surf-1); border: 1px solid var(--border);
+  border-radius: var(--r-lg); overflow: hidden; margin-bottom: 20px;
+  box-shadow: 0 1px 4px var(--accent-shadow);
+}
+.sa-section-header {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 14px 20px; border-bottom: 1px solid var(--border);
+  background: var(--surf-2);
+}
+.sa-section-title {
+  font-family: var(--ff-disp); font-size: 12px; font-weight: 800;
+  letter-spacing: .08em; text-transform: uppercase; color: var(--text-3);
+}
+.sa-section-count {
+  font-family: var(--ff-mono); font-size: 12px; font-weight: 700;
+  color: var(--text-2); background: var(--surf-3);
+  border: 1px solid var(--border); border-radius: 99px;
+  padding: 1px 8px;
+}
+.sa-table { width: 100%; border-collapse: collapse; font-size: 14px; }
+.sa-table thead th {
+  padding: 10px 16px; text-align: left;
+  font-family: var(--ff-disp); font-size: 11px; font-weight: 800;
+  letter-spacing: .08em; text-transform: uppercase; color: var(--text-3);
+  background: var(--surf-1); border-bottom: 1px solid var(--border);
+}
+.sa-table thead th.r { text-align: right; }
+.sa-table tbody tr { border-bottom: 1px solid var(--border); transition: background var(--trans); }
+.sa-table tbody tr:hover { background: var(--surf-2); cursor: pointer; }
+.sa-table tbody tr:last-child { border-bottom: none; }
+.sa-table td { padding: 12px 16px; vertical-align: middle; }
+.sa-name { font-weight: 700; color: var(--text); }
+.sa-slug { font-family: var(--ff-mono); font-size: 12px; color: var(--text-3);
+  background: var(--surf-2); border: 1px solid var(--border);
+  border-radius: 4px; padding: 1px 6px; }
+.sa-badge {
+  display: inline-flex; align-items: center; padding: 3px 10px;
+  border-radius: 99px; font-family: var(--ff-disp); font-size: 11px;
+  font-weight: 800; letter-spacing: .06em; text-transform: uppercase;
+}
+.sa-badge.pro { background: rgba(143,78,0,.12); color: var(--accent); border: 1px solid var(--accent-brd); }
+.sa-badge.basico { background: var(--surf-3); color: var(--text-3); border: 1px solid var(--border); }
+.sa-status {
+  display: inline-flex; align-items: center; gap: 6px;
+  font-size: 13px; font-weight: 600; color: var(--text-2);
+}
+.sa-status-dot {
+  width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0;
+}
+.sa-status-dot.on  { background: var(--success); box-shadow: 0 0 0 3px rgba(22,163,74,.15); }
+.sa-status-dot.off { background: var(--danger); }
+.sa-actions { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; }
+.sa-btn {
+  height: 28px; padding: 0 12px; border-radius: var(--r-sm);
+  font-family: var(--ff-disp); font-size: 11px; font-weight: 800;
+  letter-spacing: .05em; text-transform: uppercase; cursor: pointer;
+  transition: all 120ms; border: 1px solid var(--border);
+  background: var(--surf-2); color: var(--text-2);
+  display: inline-flex; align-items: center; gap: 4px; white-space: nowrap;
+}
+.sa-btn:hover { border-color: var(--border-hi); color: var(--text); background: var(--surf-3); }
+.sa-btn:active { transform: scale(.94); }
+.sa-btn.go { border-color: var(--accent-brd); color: var(--accent); background: var(--accent-bg); }
+.sa-btn.go:hover { background: var(--accent); color: #fff; border-color: var(--accent); }
+.sa-btn.del { color: var(--danger); border-color: rgba(220,38,38,.2); }
+.sa-btn.del:hover { background: rgba(220,38,38,.08); border-color: rgba(220,38,38,.4); color: var(--danger); }
+.sa-empty { padding: 32px; text-align: center; color: var(--text-3); font-size: 13px; }
+.sa-diag-btn {
+  display: inline-flex; align-items: center; gap: 8px;
+  height: 36px; padding: 0 16px; border-radius: var(--r-md);
+  font-family: var(--ff-disp); font-size: 12px; font-weight: 800;
+  letter-spacing: .06em; text-transform: uppercase; cursor: pointer;
+  border: 1px dashed var(--border-hi); background: transparent;
+  color: var(--text-2); transition: all var(--trans);
+}
+.sa-diag-btn:hover { background: var(--surf-2); color: var(--text); border-style: solid; }
+.sa-diag-btn:active { transform: scale(.96); }
+.sa-security-card {
+  background: var(--surf-1); border: 1px solid var(--border);
+  border-radius: var(--r-lg); overflow: hidden; margin-bottom: 20px;
+  box-shadow: 0 1px 4px var(--accent-shadow);
+}
+.sa-security-title {
+  padding: 14px 20px; border-bottom: 1px solid var(--border);
+  background: var(--surf-2); font-family: var(--ff-disp); font-size: 12px;
+  font-weight: 800; letter-spacing: .08em; text-transform: uppercase; color: var(--text-3);
+  display: flex; align-items: center; gap: 8px;
+}
 
 /* ── RESPONSIVE: forzar tarjetas en mobile ── */
 @media (max-width: 640px) {
@@ -1590,13 +1707,18 @@ table.inv-table {
   </div>
 
   <div class="screen" id="screen-superadmin" style="display:none; flex-direction:column; overflow-y:auto;">
-    <div style="padding:32px 24px;">
-      <h2 style="font-family:var(--ff-disp); font-size:20px; font-weight:700; margin-bottom:8px;">Panel Superadmin</h2>
-      <p style="color:var(--text-2); font-size:14px; margin-bottom:24px;">Gestión de tiendas y usuarios de la plataforma AESSPOS.</p>
+    <div class="sa-wrap">
+      <div class="sa-page-header">
+        <div>
+          <div class="sa-page-title">Panel Superadmin</div>
+          <div class="sa-page-sub">Gestión de tiendas y usuarios de la plataforma AESSPOS.</div>
+        </div>
+      </div>
       <div id="superadmin-content">Cargando...</div>
-      <hr style="border:none; border-top:1px solid var(--border); margin:8px 0 24px;">
-      <h3 style="font-size:15px; font-weight:700; margin-bottom:16px;">🔐 Seguridad de mi cuenta</h3>
-      <div id="security-panel">Cargando...</div>
+      <div class="sa-security-card" style="margin-top:8px;">
+        <div class="sa-security-title">🔐 Seguridad de mi cuenta</div>
+        <div id="security-panel" style="padding:20px;">Cargando...</div>
+      </div>
     </div>
   </div>
 
@@ -4167,44 +4289,56 @@ async function renderSuperadmin() {
     if (!res) return;
     const tiendas = await res.json();
     content.innerHTML = `
-      <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:16px;">
-        <h3 style="font-size:15px; font-weight:700;">Tiendas (${tiendas.length})</h3>
-        <button class="btn-primary" onclick="openModal('modal-nueva-tienda')">+ Nueva Tienda</button>
+      <div class="sa-section">
+        <div class="sa-section-header">
+          <span class="sa-section-title">Tiendas</span>
+          <div style="display:flex;align-items:center;gap:10px;">
+            <span class="sa-section-count">${tiendas.length}</span>
+            <button class="btn-primary" style="height:34px;font-size:13px;padding:0 16px;" onclick="openModal('modal-nueva-tienda')">+ Nueva Tienda</button>
+          </div>
+        </div>
+        <div style="overflow-x:auto;">
+          <table class="sa-table">
+            <thead>
+              <tr>
+                <th>Nombre</th>
+                <th>Slug</th>
+                <th>Plan</th>
+                <th class="r">Usuarios</th>
+                <th>Estado</th>
+                <th>Acciones</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${tiendas.length === 0
+                ? '<tr><td colspan="6" class="sa-empty">Sin tiendas registradas</td></tr>'
+                : tiendas.map(t => `
+                <tr onclick="verDetalleTienda(${t.id})">
+                  <td><span class="sa-name">${esc(t.nombre)}</span></td>
+                  <td><span class="sa-slug">${esc(t.slug)}</span></td>
+                  <td><span class="sa-badge ${t.plan === 'pro' ? 'pro' : 'basico'}">${esc(t.plan)}</span></td>
+                  <td style="text-align:right; font-family:var(--ff-mono); font-weight:700;">${t.num_usuarios}</td>
+                  <td>
+                    <span class="sa-status">
+                      <span class="sa-status-dot ${t.activo ? 'on' : 'off'}"></span>
+                      ${t.activo ? 'Activa' : 'Inactiva'}
+                    </span>
+                  </td>
+                  <td>
+                    <div class="sa-actions">
+                      <button class="sa-btn go" onclick="event.stopPropagation(); verDetalleTienda(${t.id})">Ver →</button>
+                      <button class="sa-btn" onclick="event.stopPropagation(); abrirEditarTienda(${t.id},'${esc(t.nombre)}','${esc(t.slug)}','${esc(t.plan)}',${t.activo},'${esc(t.tipo||'')}')">Editar</button>
+                      <button class="sa-btn del" onclick="event.stopPropagation(); eliminarTienda(${t.id},'${esc(t.nombre)}')">Eliminar</button>
+                    </div>
+                  </td>
+                </tr>`).join('')
+              }
+            </tbody>
+          </table>
+        </div>
       </div>
-      <div style="overflow-x:auto;">
-        <table style="width:100%; border-collapse:collapse; font-size:14px;">
-          <thead>
-            <tr style="border-bottom:2px solid var(--border); text-align:left;">
-              <th style="padding:8px 12px; color:var(--text-2);">Nombre</th>
-              <th style="padding:8px 12px; color:var(--text-2);">Slug</th>
-              <th style="padding:8px 12px; color:var(--text-2);">Plan</th>
-              <th style="padding:8px 12px; color:var(--text-2); text-align:right;">Usuarios</th>
-              <th style="padding:8px 12px; color:var(--text-2);">Estado</th>
-              <th style="padding:8px 12px; color:var(--text-2);">Acciones</th>
-            </tr>
-          </thead>
-          <tbody>
-            ${tiendas.length === 0
-              ? '<tr><td colspan="6" style="padding:20px; text-align:center; color:var(--text-2)">Sin tiendas registradas</td></tr>'
-              : tiendas.map(t => `
-              <tr style="border-bottom:1px solid var(--border); cursor:pointer;" onclick="verDetalleTienda(${t.id})">
-                <td style="padding:10px 12px; font-weight:600;">${esc(t.nombre)}</td>
-                <td style="padding:10px 12px; color:var(--text-2); font-size:12px;">${esc(t.slug)}</td>
-                <td style="padding:10px 12px;">${esc(t.plan)}</td>
-                <td style="padding:10px 12px; text-align:right;">${t.num_usuarios}</td>
-                <td style="padding:10px 12px;">${t.activo ? '🟢 Activa' : '🔴 Inactiva'}</td>
-                <td style="padding:10px 12px; display:flex; gap:6px; flex-wrap:wrap;">
-                  <button class="btn-secondary" style="font-size:12px; padding:4px 8px;" onclick="event.stopPropagation(); verDetalleTienda(${t.id})">Ver →</button>
-                  <button class="btn-secondary" style="font-size:12px; padding:4px 8px;" onclick="event.stopPropagation(); abrirEditarTienda(${t.id},'${esc(t.nombre)}','${esc(t.slug)}','${esc(t.plan)}',${t.activo},'${esc(t.tipo||'')}')">Editar</button>
-                  <button class="btn-secondary" style="font-size:12px; padding:4px 8px; color:var(--danger);" onclick="event.stopPropagation(); eliminarTienda(${t.id},'${esc(t.nombre)}')">Eliminar</button>
-                </td>
-              </tr>`).join('')
-            }
-          </tbody>
-        </table>
-      </div>
-      <div style="margin-top:24px">
-        <button class="btn-secondary" onclick="verDiagnosticoInventario()" style="font-size:13px">
+      <div style="margin-top:4px; margin-bottom:20px;">
+        <button class="sa-diag-btn" onclick="verDiagnosticoInventario()">
           🔍 Diagnóstico de inventario (productos por tienda)
         </button>
         <div id="diagnostico-inv" style="display:none; margin-top:12px"></div>
@@ -4288,39 +4422,63 @@ async function verDetalleTienda(tiendaId) {
     if (!tienda) { content.innerHTML = '<p style="color:var(--danger)">Tienda no encontrada</p>'; return; }
     const usuarios = await uRes.json();
     content.innerHTML = `
-      <button class="btn-secondary" onclick="renderSuperadmin()" style="margin-bottom:16px;">← Volver</button>
-      <h3 style="font-size:16px; font-weight:700; margin-bottom:4px;">${esc(tienda.nombre)}</h3>
-      <p style="color:var(--text-2); font-size:13px; margin-bottom:20px;">${esc(tienda.slug)} · ${esc(tienda.plan)} · ${tienda.activo ? '🟢 Activa' : '🔴 Inactiva'}${tienda.tipo ? ` · ${tienda.tipo.replace('_',' ')}` : ''}</p>
-      <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:12px;">
-        <h4 style="font-size:14px; font-weight:700;">Usuarios</h4>
-        <button class="btn-primary" onclick="_abrirModalNuevoUsuarioSA(${tiendaId})">+ Nuevo Usuario</button>
+      <div style="display:flex; align-items:center; gap:12px; margin-bottom:20px;">
+        <button class="sa-btn" onclick="renderSuperadmin()">← Volver</button>
+        <div>
+          <div style="font-family:var(--ff-disp); font-size:20px; font-weight:800; color:var(--text);">${esc(tienda.nombre)}</div>
+          <div style="display:flex; align-items:center; gap:8px; margin-top:4px; flex-wrap:wrap;">
+            <span class="sa-slug">${esc(tienda.slug)}</span>
+            <span class="sa-badge ${tienda.plan === 'pro' ? 'pro' : 'basico'}">${esc(tienda.plan)}</span>
+            <span class="sa-status">
+              <span class="sa-status-dot ${tienda.activo ? 'on' : 'off'}"></span>
+              ${tienda.activo ? 'Activa' : 'Inactiva'}
+            </span>
+            ${tienda.tipo ? `<span style="font-size:12px; color:var(--text-3);">${tienda.tipo.replace('_',' ')}</span>` : ''}
+          </div>
+        </div>
       </div>
-      <table style="width:100%; border-collapse:collapse; font-size:14px;">
-        <thead><tr style="border-bottom:2px solid var(--border); text-align:left;">
-          <th style="padding:8px 12px; color:var(--text-2);">Nombre</th>
-          <th style="padding:8px 12px; color:var(--text-2);">Usuario</th>
-          <th style="padding:8px 12px; color:var(--text-2);">Rol</th>
-          <th style="padding:8px 12px; color:var(--text-2);">Estado</th>
-          <th style="padding:8px 12px; color:var(--text-2);">Acciones</th>
-        </tr></thead>
-        <tbody>
-          ${usuarios.length === 0
-            ? '<tr><td colspan="5" style="padding:20px; text-align:center; color:var(--text-2)">Sin usuarios registrados</td></tr>'
-            : usuarios.map(u => `
-          <tr style="border-bottom:1px solid var(--border);">
-            <td style="padding:10px 12px;">${esc(u.nombre)}</td>
-            <td style="padding:10px 12px; color:var(--text-2);">${esc(u.username)}</td>
-            <td style="padding:10px 12px;">${esc(u.rol)}</td>
-            <td style="padding:10px 12px;">${u.activo ? '✅ Activo' : '⛔ Inactivo'}</td>
-            <td style="padding:10px 12px; display:flex; gap:6px; flex-wrap:wrap;">
-              <button class="btn-secondary" style="font-size:12px; padding:4px 8px;" onclick="toggleUsuarioActivo(${u.id},${u.activo ? 0 : 1},${tiendaId})">${u.activo ? 'Desactivar' : 'Activar'}</button>
-              <button class="btn-secondary" style="font-size:12px; padding:4px 8px;" onclick="abrirEditarUsuario(${u.id},'${esc(u.nombre)}','${esc(u.rol)}',${tiendaId})">Editar</button>
-              <button class="btn-secondary" style="font-size:12px; padding:4px 8px; color:var(--danger);" onclick="eliminarUsuario(${u.id},'${esc(u.nombre)}',${tiendaId})">Eliminar</button>
-            </td>
-          </tr>`).join('')
-          }
-        </tbody>
-      </table>`;
+      <div class="sa-section">
+        <div class="sa-section-header">
+          <span class="sa-section-title">Usuarios</span>
+          <div style="display:flex;align-items:center;gap:10px;">
+            <span class="sa-section-count">${usuarios.length}</span>
+            <button class="btn-primary" style="height:34px;font-size:13px;padding:0 16px;" onclick="_abrirModalNuevoUsuarioSA(${tiendaId})">+ Nuevo Usuario</button>
+          </div>
+        </div>
+        <table class="sa-table">
+          <thead><tr>
+            <th>Nombre</th>
+            <th>Usuario</th>
+            <th>Rol</th>
+            <th>Estado</th>
+            <th>Acciones</th>
+          </tr></thead>
+          <tbody>
+            ${usuarios.length === 0
+              ? '<tr><td colspan="5" class="sa-empty">Sin usuarios registrados</td></tr>'
+              : usuarios.map(u => `
+            <tr>
+              <td><span class="sa-name">${esc(u.nombre)}</span></td>
+              <td><span class="sa-slug">${esc(u.username)}</span></td>
+              <td style="color:var(--text-2); font-size:13px;">${esc(u.rol)}</td>
+              <td>
+                <span class="sa-status">
+                  <span class="sa-status-dot ${u.activo ? 'on' : 'off'}"></span>
+                  ${u.activo ? 'Activo' : 'Inactivo'}
+                </span>
+              </td>
+              <td>
+                <div class="sa-actions">
+                  <button class="sa-btn ${u.activo ? 'del' : 'go'}" onclick="toggleUsuarioActivo(${u.id},${u.activo ? 0 : 1},${tiendaId})">${u.activo ? 'Desactivar' : 'Activar'}</button>
+                  <button class="sa-btn" onclick="abrirEditarUsuario(${u.id},'${esc(u.nombre)}','${esc(u.rol)}',${tiendaId})">Editar</button>
+                  <button class="sa-btn del" onclick="eliminarUsuario(${u.id},'${esc(u.nombre)}',${tiendaId})">Eliminar</button>
+                </div>
+              </td>
+            </tr>`).join('')
+            }
+          </tbody>
+        </table>
+      </div>`;
   } catch(e) {
     content.innerHTML = '<p style="color:var(--danger)">Error cargando detalle</p>';
   }
