@@ -1963,7 +1963,10 @@ button:not(:disabled):active {
       <div id="user-chip" class="user-chip" style="display:none;">
         <div class="user-avatar" id="user-chip-avatar">?</div>
         <span class="user-chip-name" id="user-chip-name"></span>
-        <button class="btn-logout" onclick="doLogout()" title="Cerrar sesión"><span class="logout-icon">⏻</span><span class="logout-label">Salir</span></button>
+        <button class="btn-logout" onclick="doLogout()" title="Cerrar sesión">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
+          <span class="logout-label">Salir</span>
+        </button>
       </div>
       <button id="btn-install-pwa" onclick="installPWA()" title="Instalar app" style="display:none;align-items:center;gap:4px;padding:4px 10px;border-radius:20px;border:1px solid var(--accent);background:var(--accent-bg);color:var(--accent);font-size:12px;font-weight:600;cursor:pointer;">⬇ Instalar</button>
       <button class="theme-toggle" id="theme-toggle" onclick="toggleTheme()" title="Cambiar tema"></button>
@@ -1992,7 +1995,7 @@ button:not(:disabled):active {
       <div class="search-bar">
         <div class="search-wrap">
           <span class="scan-icon">⌨</span>
-          <input type="text" id="search-input" placeholder="Buscar por nombre o código..." autocomplete="off" autofocus>
+          <input type="text" id="search-input" placeholder="Buscar por nombre o código..." autocomplete="off">
         </div>
         <span id="search-count" class="search-count"></span>
         <button class="btn-cam-scan" onclick="openCameraScanner('cobro')" title="Escanear código con cámara">📷</button>
@@ -2225,6 +2228,24 @@ button:not(:disabled):active {
   </nav>
 
 </div><!-- #app -->
+
+<!-- MODAL: CONFIRM (reemplaza confirm() nativo del navegador) -->
+<div class="modal-overlay" id="modal-confirm">
+  <div class="modal" style="max-width:340px">
+    <div class="modal-header" style="gap:10px;">
+      <span id="confirm-icon" style="font-size:22px;"></span>
+      <h2 id="confirm-title" style="flex:1;">Confirmar</h2>
+      <button class="btn-close" onclick="_confirmCancel()">✕</button>
+    </div>
+    <div class="modal-body">
+      <p id="confirm-msg" style="color:var(--text-2);font-size:15px;line-height:1.6;white-space:pre-line;"></p>
+    </div>
+    <div class="modal-footer">
+      <button class="btn-secondary" onclick="_confirmCancel()">Cancelar</button>
+      <button class="btn-primary" id="confirm-ok-btn" onclick="_confirmOk()">Confirmar</button>
+    </div>
+  </div>
+</div>
 
 <!-- MODAL: PAGO -->
 <div class="modal-overlay" id="modal-pago">
@@ -2852,9 +2873,10 @@ document.getElementById('login-username').addEventListener('keydown', e => {
   if (e.key === 'Enter') document.getElementById('login-password').focus();
 });
 
-function doLogout() {
+async function doLogout() {
   if (cajaSession) { showToast('⚠ Cierra la caja antes de cerrar sesión'); return; }
-  if (!confirm('¿Cerrar sesión?')) return;
+  const ok = await showConfirm('¿Seguro que quieres cerrar sesión?', { title: 'Cerrar sesión', okLabel: 'Salir', danger: true, icon: '🚪' });
+  if (!ok) return;
   if (_expiryCheckInterval) { clearInterval(_expiryCheckInterval); _expiryCheckInterval = null; }
   ['aesspos_token','aesspos_exp','aesspos_user','aesspos_tienda'].forEach(k => localStorage.removeItem(k));
   location.reload();
@@ -3338,7 +3360,7 @@ async function lookupAndOffer(barcode) {
     }
     const p = data.product;
     // Abrir modal de producto pre-llenado para agregarlo al inventario
-    const confirmed = confirm(`🛒 Producto encontrado:\n"${p.name}" (${p.cat})\n\n¿Agregar al inventario?`);
+    const confirmed = await showConfirm(`"${p.name}" (${p.cat})\n\n¿Agregar al inventario?`, { title: '🛒 Producto encontrado', okLabel: 'Agregar', icon: '🛒' });
     if (!confirmed) return;
     openProdModal();
     setTimeout(() => {
@@ -3482,6 +3504,10 @@ function _processScan(barcode) {
 // ─── COBRO: CART ──────────────────────────────
 let _lastAddedCartId = null;
 function addToCart(productId) {
+  // Cerrar teclado en mobile al agregar producto
+  if (document.activeElement && document.activeElement.tagName !== 'BODY') {
+    document.activeElement.blur();
+  }
   const product = products.find(p => p.id === productId);
   if (!product || product.stock === 0) return;
   const existing = cart.find(i => i.id === productId);
@@ -4341,7 +4367,8 @@ async function saveProduct() {
 }
 
 async function deleteProduct(id) {
-  if (!confirm('¿Eliminar este producto?')) return;
+  const ok = await showConfirm('¿Eliminar este producto? Esta acción no se puede deshacer.', { title: 'Eliminar producto', okLabel: 'Eliminar', danger: true, icon: '🗑️' });
+  if (!ok) return;
   try {
     const delRes = await apiFetch(`/api/productos/${id}`, { method: 'DELETE' });
     if (!delRes) return;
@@ -4548,6 +4575,33 @@ let cajaSession = null; // { cajero, inicio, montoInicial, ventasIds[] }
 
 function openModal(id) { document.getElementById(id).classList.add('open'); }
 
+// ── CONFIRM DIALOG — reemplaza window.confirm() nativo ──
+let _confirmResolveFn = null;
+
+function showConfirm(message, opts = {}) {
+  const {
+    title    = 'Confirmar',
+    okLabel  = 'Confirmar',
+    danger   = false,
+    icon     = danger ? '⚠️' : 'ℹ️'
+  } = opts;
+  return new Promise(resolve => {
+    _confirmResolveFn = resolve;
+    document.getElementById('confirm-title').textContent = title;
+    document.getElementById('confirm-msg').textContent   = message;
+    document.getElementById('confirm-icon').textContent  = icon;
+    const okBtn = document.getElementById('confirm-ok-btn');
+    okBtn.textContent = okLabel;
+    okBtn.style.background = danger
+      ? 'linear-gradient(135deg,#b91c1c 0%,#ef4444 100%)'
+      : '';
+    okBtn.style.boxShadow = danger ? '0 3px 12px rgba(185,28,28,.35)' : '';
+    openModal('modal-confirm');
+  });
+}
+function _confirmOk()     { closeModal('modal-confirm'); if (_confirmResolveFn) { _confirmResolveFn(true);  _confirmResolveFn = null; } }
+function _confirmCancel() { closeModal('modal-confirm'); if (_confirmResolveFn) { _confirmResolveFn(false); _confirmResolveFn = null; } }
+
 async function abrirCaja() {
   const cajero = currentUser?.nombre || document.getElementById('apertura-cajero').value.trim();
   const monto  = parseMoney('apertura-monto');
@@ -4566,8 +4620,9 @@ async function abrirCaja() {
       const t = data.turno_activo;
       const fecha = new Date(t.apertura_at.replace(' ','T'))
         .toLocaleDateString('es-CO', {day:'2-digit',month:'2-digit'});
-      const confirmar = confirm(
-        `Hay un turno de "${t.cajero}" sin cerrar desde ${fecha}.\n¿Cerrarlo automáticamente y abrir uno nuevo?`
+      const confirmar = await showConfirm(
+        `Hay un turno de "${t.cajero}" sin cerrar desde ${fecha}.\n¿Cerrarlo automáticamente y abrir uno nuevo?`,
+        { title: 'Turno activo', okLabel: 'Cerrar y abrir nuevo', icon: '🔄' }
       );
       if (!confirmar) return;
       const cierreRes = await apiFetch(`/api/turnos/${t.id}/cierre`, {
@@ -4795,6 +4850,11 @@ async function iniciarApp(user, tienda) {
     renderInventario();
     renderReportes();
     updateLowStockBadge();
+    // Autofocus en búsqueda solo en desktop (no en mobile para no abrir teclado)
+    if (window.innerWidth > 640) {
+      const si = document.getElementById('search-input');
+      if (si) si.focus();
+    }
     _actualizarBotonesProUI();
     // Si admin, agregar pestaña Usuarios
     if (user.rol === 'admin') {
@@ -4926,7 +4986,7 @@ async function reasignarProductos(desdeId, desdeNombre, haciaId, haciaNombre) {
   const msg = desdeId === null
     ? `¿Asignar todos los productos SIN TIENDA a "${haciaNombre}"?`
     : `¿Mover TODOS los productos de "${desdeNombre}" a "${haciaNombre}"?\n\nEsto no se puede deshacer fácilmente.`;
-  if (!confirm(msg)) return;
+  if (!await showConfirm(msg, { title: 'Reasignar productos', okLabel: 'Reasignar', icon: '📦' })) return;
   try {
     const res = await apiFetch('/api/admin/reasignar-productos', {
       method: 'POST',
@@ -5107,7 +5167,7 @@ async function guardarTienda() {
 }
 
 async function eliminarTienda(id, nombre) {
-  if (!confirm(`¿Eliminar "${nombre}"?\n\nEsto eliminará también todos sus usuarios y productos. Esta acción no se puede deshacer.`)) return;
+  if (!await showConfirm(`¿Eliminar la tienda "${nombre}"?\n\nEsto eliminará también todos sus usuarios y productos. Esta acción no se puede deshacer.`, { title: 'Eliminar tienda', okLabel: 'Eliminar', danger: true, icon: '🗑️' })) return;
   const res = await apiFetch(`/api/tiendas/${id}`, { method:'DELETE' });
   if (!res) return;
   if (!res.ok) { const d = await res.json(); showToast('⚠ ' + d.error); return; }
@@ -5142,7 +5202,7 @@ async function guardarUsuario() {
 }
 
 async function eliminarUsuario(id, nombre, tiendaId) {
-  if (!confirm(`¿Eliminar al usuario "${nombre}"?`)) return;
+  if (!await showConfirm(`¿Eliminar al usuario "${nombre}"?`, { title: 'Eliminar usuario', okLabel: 'Eliminar', danger: true, icon: '👤' })) return;
   const res = await apiFetch(`/api/usuarios/${id}`, { method:'DELETE' });
   if (!res) return;
   if (!res.ok) { const d = await res.json(); showToast('⚠ ' + d.error); return; }
@@ -5368,7 +5428,7 @@ async function vincularGoogle() {
 }
 
 async function desvincularGoogle() {
-  if (!confirm('¿Desvincular tu cuenta Google? Podrás seguir iniciando sesión con tu contraseña.')) return;
+  if (!await showConfirm('¿Desvincular tu cuenta Google? Podrás seguir iniciando sesión con tu contraseña.', { title: 'Desvincular Google', okLabel: 'Desvincular', danger: true, icon: '🔗' })) return;
   const res = await apiFetch('/api/auth/2fa/link-google', { method: 'DELETE' });
   if (!res) return;
   if (!res.ok) { const d = await res.json(); showToast('⚠ ' + (d.error || 'Error')); return; }
