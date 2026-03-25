@@ -41,12 +41,23 @@ GOOGLE_CLIENT_ID     = os.environ.get("GOOGLE_CLIENT_ID", "")
 GOOGLE_CLIENT_SECRET = os.environ.get("GOOGLE_CLIENT_SECRET", "")
 GOOGLE_REDIRECT_URI  = os.environ.get("GOOGLE_REDIRECT_URI", "")
 
+_WEAK_DEFAULT_KEY = "dev-secret-key-cambia-en-produccion"
 if not SECRET_KEY:
     raise RuntimeError(
         "[AESSPOS] SECRET_KEY no configurada.\n"
         "  En Railway: Variables → agregar SECRET_KEY con un valor aleatorio largo.\n"
         "  En local: agregar SECRET_KEY=<valor> en el archivo .env"
     )
+_IS_CLOUD = bool(os.environ.get("PORT") or os.environ.get("RAILWAY_ENVIRONMENT") or os.environ.get("RENDER"))
+if SECRET_KEY == _WEAK_DEFAULT_KEY:
+    if _IS_CLOUD:
+        raise RuntimeError(
+            "[AESSPOS] SECRET_KEY usa el valor por defecto inseguro.\n"
+            "  Genera una clave: python3 -c \"import secrets; print(secrets.token_urlsafe(32))\"\n"
+            "  Y agrégala en Railway/Render → Variables de entorno."
+        )
+    else:
+        print("  [AESSPOS] ⚠  SECRET_KEY usa el valor por defecto de .env — cámbiala antes de pasar a producción.")
 
 AuthContext = namedtuple("AuthContext", ["user_id", "tienda_id", "rol"])
 
@@ -358,17 +369,33 @@ class Handler(BaseHTTPRequestHandler):
     def log_message(self, format, *args):
         print(f"  {self.command} {self.path} → {args[1] if len(args)>1 else ''}")
 
+    def _cors_origin(self):
+        """Permite solo orígenes del mismo host. Nunca devuelve '*'."""
+        origin = self.headers.get("Origin", "")
+        if not origin:
+            return None  # misma origen, no se necesita header CORS
+        host = self.headers.get("Host", "")
+        if origin in (f"http://{host}", f"https://{host}"):
+            return origin
+        return None  # origen externo desconocido → no agregar header
+
     def send_json(self, data, status=200):
         body = json.dumps(data, ensure_ascii=False).encode("utf-8")
         self.send_response(status)
         self.send_header("Content-Type", "application/json; charset=utf-8")
         self.send_header("Content-Length", len(body))
-        self.send_header("Access-Control-Allow-Origin", "*")
+        cors = self._cors_origin()
+        if cors:
+            self.send_header("Access-Control-Allow-Origin", cors)
         self.end_headers()
         self.wfile.write(body)
 
     def send_error_json(self, msg, status=400):
-        self.send_json({"error": msg}, status)
+        if status >= 500:
+            print(f"  [ERROR {status}] {msg}")
+            self.send_json({"error": "Error interno del servidor"}, status)
+        else:
+            self.send_json({"error": msg}, status)
 
     def require_auth(self):
         """Valida el token Bearer. Retorna AuthContext o envía 401 y retorna None."""
@@ -795,21 +822,29 @@ class Handler(BaseHTTPRequestHandler):
         except Exception as e:
             self.send_error_json(str(e), 500)
 
-    def read_json_body(self):
+    def read_json_body(self, max_size=2_000_000):
+        """Lee y parsea el body JSON. Rechaza payloads > 2 MB para prevenir DoS."""
         length = int(self.headers.get("Content-Length", 0))
+        if length > max_size:
+            self.send_error_json("Payload demasiado grande", 413)
+            return None
         data = b""
         while len(data) < length:
             chunk = self.rfile.read(length - len(data))
             if not chunk:
                 break
             data += chunk
+        if not data:
+            return {}
         return json.loads(data)
 
     def do_OPTIONS(self):
         self.send_response(200)
-        self.send_header("Access-Control-Allow-Origin", "*")
-        self.send_header("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS")
-        self.send_header("Access-Control-Allow-Headers", "Content-Type, Authorization")
+        cors = self._cors_origin()
+        if cors:
+            self.send_header("Access-Control-Allow-Origin", cors)
+            self.send_header("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS")
+            self.send_header("Access-Control-Allow-Headers", "Content-Type, Authorization")
         self.end_headers()
 
     # ── GET ────────────────────────────────────────────────────────
@@ -1011,6 +1046,9 @@ class Handler(BaseHTTPRequestHandler):
             self.send_response(200)
             self.send_header("Content-Type", content_type)
             self.send_header("Content-Length", len(data))
+            self.send_header("X-Content-Type-Options", "nosniff")
+            self.send_header("X-Frame-Options", "SAMEORIGIN")
+            self.send_header("Referrer-Policy", "strict-origin-when-cross-origin")
             self.end_headers()
             self.wfile.write(data)
         except Exception:

@@ -1560,8 +1560,9 @@ table.inv-table {
   box-shadow: 0 0 0 3px var(--accent-bg);
 }
 
-/* ── PAGO: cambio positivo en verde ── */
-.cambio-positive { color: var(--success) !important; }
+/* ── PAGO: cambio positivo en verde / faltante en rojo ── */
+.cambio-positive  { color: var(--success) !important; }
+.cambio-faltante  { color: var(--danger)  !important; font-size: 20px !important; }
 
 /* ── FEEDBACK TÁCTIL BOTONES (global) ── */
 .btn-primary:active,
@@ -2320,22 +2321,22 @@ button:not(:disabled):active {
       </div>
       <!-- Acceso rápido emojis frutas/verduras -->
       <div class="manual-emoji-grid">
-        <button class="emoji-quick" onclick="setManualEmoji('🍌')">🍌</button>
-        <button class="emoji-quick" onclick="setManualEmoji('🍎')">🍎</button>
-        <button class="emoji-quick" onclick="setManualEmoji('🍊')">🍊</button>
-        <button class="emoji-quick" onclick="setManualEmoji('🍋')">🍋</button>
-        <button class="emoji-quick" onclick="setManualEmoji('🍇')">🍇</button>
-        <button class="emoji-quick" onclick="setManualEmoji('🍓')">🍓</button>
-        <button class="emoji-quick" onclick="setManualEmoji('🍅')">🍅</button>
-        <button class="emoji-quick" onclick="setManualEmoji('🥦')">🥦</button>
-        <button class="emoji-quick" onclick="setManualEmoji('🥕')">🥕</button>
-        <button class="emoji-quick" onclick="setManualEmoji('🌽')">🌽</button>
-        <button class="emoji-quick" onclick="setManualEmoji('🥑')">🥑</button>
-        <button class="emoji-quick" onclick="setManualEmoji('🫒')">🫒</button>
-        <button class="emoji-quick" onclick="setManualEmoji('🥔')">🥔</button>
-        <button class="emoji-quick" onclick="setManualEmoji('🧅')">🧅</button>
-        <button class="emoji-quick" onclick="setManualEmoji('⚖️')">⚖️</button>
-        <button class="emoji-quick" onclick="setManualEmoji('🥩')">🥩</button>
+        <button class="emoji-quick" onclick="setManualEmoji('🍌', this)">🍌</button>
+        <button class="emoji-quick" onclick="setManualEmoji('🍎', this)">🍎</button>
+        <button class="emoji-quick" onclick="setManualEmoji('🍊', this)">🍊</button>
+        <button class="emoji-quick" onclick="setManualEmoji('🍋', this)">🍋</button>
+        <button class="emoji-quick" onclick="setManualEmoji('🍇', this)">🍇</button>
+        <button class="emoji-quick" onclick="setManualEmoji('🍓', this)">🍓</button>
+        <button class="emoji-quick" onclick="setManualEmoji('🍅', this)">🍅</button>
+        <button class="emoji-quick" onclick="setManualEmoji('🥦', this)">🥦</button>
+        <button class="emoji-quick" onclick="setManualEmoji('🥕', this)">🥕</button>
+        <button class="emoji-quick" onclick="setManualEmoji('🌽', this)">🌽</button>
+        <button class="emoji-quick" onclick="setManualEmoji('🥑', this)">🥑</button>
+        <button class="emoji-quick" onclick="setManualEmoji('🫒', this)">🫒</button>
+        <button class="emoji-quick" onclick="setManualEmoji('🥔', this)">🥔</button>
+        <button class="emoji-quick" onclick="setManualEmoji('🧅', this)">🧅</button>
+        <button class="emoji-quick" onclick="setManualEmoji('⚖️', this)">⚖️</button>
+        <button class="emoji-quick" onclick="setManualEmoji('🥩', this)">🥩</button>
       </div>
       <div class="form-group">
         <label class="form-label">Valor a cobrar ($)</label>
@@ -3156,7 +3157,9 @@ async function _loadThumbnailsBackground() {
 const fmt = n => '$' + Math.round(n).toLocaleString('es-CO');
 
 const _esc = {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'};
-const esc = s => String(s ?? '').replace(/[&<>"']/g, c => _esc[c]);
+const esc   = s => String(s ?? '').replace(/[&<>"']/g, c => _esc[c]);
+// Para usar datos en atributos onclick: escapa caracteres especiales JS dentro de strings delimitados por '
+const escJS = s => String(s ?? '').replace(/\\/g, '\\\\').replace(/'/g, "\\'").replace(/[\n\r]/g, ' ');
 
 // Formatea un input de dinero mientras el usuario escribe (ej: 10000 → 10.000)
 function fmtInput(el) {
@@ -3281,7 +3284,7 @@ function renderCatPills() {
   const cats = getCategories();
   const container = document.getElementById('cat-pills');
   container.innerHTML = cats.map(c =>
-    `<div class="pill ${c===activeCat?'active':''}" onclick="setCategory('${c}')">${c}</div>`
+    `<div class="pill ${c===activeCat?'active':''}" onclick="setCategory('${escJS(c)}')">${esc(c)}</div>`
   ).join('');
 }
 
@@ -3739,11 +3742,10 @@ function openManualItem() {
   setTimeout(() => document.getElementById('manual-name').focus(), 120);
 }
 
-function setManualEmoji(e) {
-  document.getElementById('manual-emoji').value = e;
-  // Resaltar el botón activo
+function setManualEmoji(emojiChar, btn) {
+  document.getElementById('manual-emoji').value = emojiChar;
   document.querySelectorAll('.emoji-quick').forEach(b => b.classList.remove('active'));
-  event.target.closest('.emoji-quick').classList.add('active');
+  if (btn) btn.classList.add('active');
 }
 
 function submitManualItem() {
@@ -3876,8 +3878,8 @@ function calcCambio() {
   const recibido = parseMoney('recibido-input');
   const cambio = recibido - total;
   const cambioEl = document.getElementById('cambio-val');
-  cambioEl.textContent = cambio >= 0 ? fmt(cambio) : fmt(0);
-  cambioEl.className = cambio > 0 ? 'val cambio-positive' : 'val';
+  cambioEl.textContent = cambio >= 0 ? fmt(cambio) : '↓ Faltan ' + fmt(Math.abs(cambio));
+  cambioEl.className = cambio >= 0 ? 'val cambio-positive' : 'val cambio-faltante';
   document.getElementById('btn-cobrar').disabled = cambio < 0;
 }
 
@@ -3923,7 +3925,7 @@ async function completarVenta() {
     // Recargar stock en segundo plano (no bloquea UI)
     apiFetch('/api/productos').then(r => r && r.json()).then(data => {
       if (data) { products = data; _loadThumbnailsBackground(); updateLowStockBadge(); renderProducts(); }
-    });
+    }).catch(() => { /* fallo silencioso — stock se actualiza en la próxima interacción */ });
   } catch (err) {
     showToast('⚠ Error al registrar venta: ' + err.message);
   }
@@ -5181,8 +5183,8 @@ async function renderSuperadmin() {
                   <td>
                     <div class="sa-actions">
                       <button class="sa-btn go" onclick="event.stopPropagation(); verDetalleTienda(${t.id})">Ver →</button>
-                      <button class="sa-btn" onclick="event.stopPropagation(); abrirEditarTienda(${t.id},'${esc(t.nombre)}','${esc(t.slug)}','${esc(t.plan)}',${t.activo},'${esc(t.tipo||'')}')">Editar</button>
-                      <button class="sa-btn del" onclick="event.stopPropagation(); eliminarTienda(${t.id},'${esc(t.nombre)}')">Eliminar</button>
+                      <button class="sa-btn" onclick="event.stopPropagation(); abrirEditarTienda(${t.id},'${escJS(t.nombre)}','${escJS(t.slug)}','${escJS(t.plan)}',${t.activo},'${escJS(t.tipo||'')}')">Editar</button>
+                      <button class="sa-btn del" onclick="event.stopPropagation(); eliminarTienda(${t.id},'${escJS(t.nombre)}')">Eliminar</button>
                     </div>
                   </td>
                 </tr>`).join('')
@@ -5224,7 +5226,7 @@ async function verDiagnosticoInventario() {
             </div>
             ${tiendas.length > 1 ? tiendas.filter(x=>x.id!==t.id).map(dest => `
               <button class="btn-secondary" style="font-size:11px;padding:3px 8px"
-                      onclick="reasignarProductos(${t.id},'${esc(t.nombre)}',${dest.id},'${esc(dest.nombre)}')">
+                      onclick="reasignarProductos(${t.id},'${escJS(t.nombre)}',${dest.id},'${escJS(dest.nombre)}')">
                 → ${esc(dest.nombre)}
               </button>`).join('') : ''}
           </div>`).join('')}
@@ -5232,7 +5234,7 @@ async function verDiagnosticoInventario() {
           <div style="padding:8px 0;color:var(--warn)">
             ⚠ ${sinTienda} productos sin tienda asignada —
             ${tiendas.map(t => `<button class="btn-secondary" style="font-size:11px;padding:3px 8px;margin-left:4px"
-              onclick="reasignarProductos(null,'sin tienda',${t.id},'${esc(t.nombre)}')">→ ${esc(t.nombre)}</button>`).join('')}
+              onclick="reasignarProductos(null,'sin tienda',${t.id},'${escJS(t.nombre)}')">→ ${esc(t.nombre)}</button>`).join('')}
           </div>` : ''}
       </div>`;
   } catch(e) {
@@ -5324,8 +5326,8 @@ async function verDetalleTienda(tiendaId) {
               <td>
                 <div class="sa-actions">
                   <button class="sa-btn ${u.activo ? 'del' : 'go'}" onclick="toggleUsuarioActivo(${u.id},${u.activo ? 0 : 1},${tiendaId})">${u.activo ? 'Desactivar' : 'Activar'}</button>
-                  <button class="sa-btn" onclick="abrirEditarUsuario(${u.id},'${esc(u.nombre)}','${esc(u.rol)}',${tiendaId})">Editar</button>
-                  <button class="sa-btn del" onclick="eliminarUsuario(${u.id},'${esc(u.nombre)}',${tiendaId})">Eliminar</button>
+                  <button class="sa-btn" onclick="abrirEditarUsuario(${u.id},'${escJS(u.nombre)}','${escJS(u.rol)}',${tiendaId})">Editar</button>
+                  <button class="sa-btn del" onclick="eliminarUsuario(${u.id},'${escJS(u.nombre)}',${tiendaId})">Eliminar</button>
                 </div>
               </td>
             </tr>`).join('')
@@ -5500,8 +5502,8 @@ async function renderPanelUsuarios() {
             <td style="padding:10px 12px; display:flex; gap:6px; flex-wrap:wrap;">
               ${u.id !== currentUser?.id
                 ? `<button class="btn-secondary" style="font-size:12px; padding:4px 8px;" onclick="toggleUsuarioActivoAdmin(${u.id}, ${u.activo ? 0 : 1})">${u.activo ? 'Desactivar' : 'Activar'}</button>
-                   <button class="btn-secondary" style="font-size:12px; padding:4px 8px;" onclick="abrirEditarUsuario(${u.id},'${esc(u.nombre)}','${esc(u.rol)}',null)">Editar</button>
-                   <button class="btn-secondary" style="font-size:12px; padding:4px 8px; color:var(--danger);" onclick="eliminarUsuario(${u.id},'${esc(u.nombre)}',null)">Eliminar</button>`
+                   <button class="btn-secondary" style="font-size:12px; padding:4px 8px;" onclick="abrirEditarUsuario(${u.id},'${escJS(u.nombre)}','${escJS(u.rol)}',null)">Editar</button>
+                   <button class="btn-secondary" style="font-size:12px; padding:4px 8px; color:var(--danger);" onclick="eliminarUsuario(${u.id},'${escJS(u.nombre)}',null)">Eliminar</button>`
                 : '(yo)'}
             </td>
           </tr>`).join('')
