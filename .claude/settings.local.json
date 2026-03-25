@@ -7,7 +7,20 @@
       "Bash(git init:*)",
       "Bash(git add:*)",
       "Bash(git commit:*)",
-      "Bash(git push:*)"
+      "Bash(git push:*)",
+      "Bash(sed -i '' \"s/parseFloat\\(document.getElementById\\(''recibido-input''\\).value\\) || 0/parseMoney\\(''recibido-input''\\)/g\" /Users/sforonda/Documents/Projects/pos-minimercado/index.html)",
+      "Bash(__NEW_LINE_8831537eccd3ae2a__ sed:*)",
+      "Bash(git reset:*)",
+      "Skill(update-config)",
+      "Skill(update-config:*)",
+      "Bash(claude mcp:*)",
+      "mcp__stitch__create_project",
+      "mcp__stitch__generate_screen_from_text",
+      "mcp__stitch__list_screens",
+      "mcp__stitch__get_project",
+      "mcp__playwright__browser_navigate",
+      "WebFetch(domain:contribution.usercontent.google.com)",
+      "mcp__stitch__get_screen"
     ]
   }
 }
