@@ -3675,7 +3675,7 @@ function _updateMargenHint() {
   const compra = parseMoney('prod-precio-compra');
   if (!venta || !compra || compra <= 0) { hint.style.display = 'none'; return; }
   const ganancia = venta - compra;
-  const margen   = ((ganancia / compra) * 100).toFixed(1);
+  const margen   = ((ganancia / venta) * 100).toFixed(1);
   const color    = ganancia >= 0 ? 'var(--success, #16a34a)' : 'var(--danger, #dc2626)';
   hint.style.display = 'block';
   hint.innerHTML = `Ganancia: <strong style="color:${color}">$${ganancia.toLocaleString('es-CO')}</strong> · Margen: <strong style="color:${color}">${margen}%</strong>`;
@@ -4337,7 +4337,7 @@ function renderFacturaItems() {
 }
 
 async function aplicarFactura() {
-  const seleccionados = _facturaItems.filter(i => i.incluir !== false);
+  const seleccionados = _facturaItems.filter(i => i.incluir);
   if (!seleccionados.length) { showToast('⚠ No hay productos seleccionados'); return; }
   const btn = document.getElementById('btn-aplicar-factura');
   btn.disabled = true; btn.textContent = '⏳ Aplicando…';
@@ -4662,11 +4662,13 @@ function setPeriod(p, el) {
 
 function filterSalesByPeriod() {
   const now = new Date();
+  const todayStart  = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  const weekStart   = new Date(now.getFullYear(), now.getMonth(), now.getDate() - 6);
+  const monthStart  = new Date(now.getFullYear(), now.getMonth(), 1);
   return sales.filter(s => {
-    const diff = now - s.date;
-    if (currentPeriod === 'hoy') return diff < 86400000 && s.date.getDate() === now.getDate();
-    if (currentPeriod === 'semana') return diff < 7*86400000;
-    return diff < 30*86400000;
+    if (currentPeriod === 'hoy')    return s.date >= todayStart;
+    if (currentPeriod === 'semana') return s.date >= weekStart;
+    return s.date >= monthStart;
   });
 }
 
@@ -4690,17 +4692,17 @@ function renderReportes() {
   const prodConCosto = products.filter(p => p.precio_compra > 0);
   const margenCard = document.getElementById('kpi-margen-card');
   if (prodConCosto.length > 0 && filtered.length > 0) {
-    let gananciaTotal = 0, costoTotal = 0;
+    let gananciaTotal = 0, ventaTotal = 0;
     filtered.forEach(s => s.items.forEach(i => {
       const prod = products.find(p => p.name === i.name);
       if (prod && prod.precio_compra > 0) {
         gananciaTotal += (prod.price - prod.precio_compra) * i.qty;
-        costoTotal    += prod.precio_compra * i.qty;
+        ventaTotal    += prod.price * i.qty;
       }
     }));
     margenCard.style.display = '';
     document.getElementById('kpi-margen').textContent = fmt(gananciaTotal);
-    const margenPct = costoTotal > 0 ? Math.round(gananciaTotal / costoTotal * 100) : 0;
+    const margenPct = ventaTotal > 0 ? Math.round(gananciaTotal / ventaTotal * 100) : 0;
     const margenEl = document.getElementById('kpi-margen-pct');
     margenEl.textContent = `${margenPct}% margen`;
     margenEl.style.color = gananciaTotal >= 0 ? 'var(--success,#16a34a)' : 'var(--danger,#dc2626)';
