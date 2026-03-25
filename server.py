@@ -853,7 +853,7 @@ class Handler(BaseHTTPRequestHandler):
         if path in ("/", "/index.html") or path.startswith("/t/"):
             self._serve_file(BASE_DIR / "index.html", "text/html")
         elif path == "/api/status":
-            self.send_json({"db": "turso" if USE_TURSO else "sqlite", "turso_url": bool(TURSO_URL), "libsql_ok": _LIBSQL_OK})
+            self.send_json({"status": "ok"})
         elif path == "/api/auth/me":
             self._auth_me()
         elif path == "/api/auth/google":

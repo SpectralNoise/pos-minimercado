@@ -3,10 +3,12 @@
   "short_name": "AESSPOS",
   "description": "Sistema de punto de venta para mini mercado",
   "start_url": "/",
+  "scope": "/",
   "display": "standalone",
   "background_color": "#0f172a",
   "theme_color": "#0f172a",
   "orientation": "portrait",
+  "categories": ["business", "productivity"],
   "icons": [
     {
       "src": "/icon-192.png",
