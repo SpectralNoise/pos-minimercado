@@ -5792,6 +5792,7 @@ function iniciarCheckExpiracion() {
     localStorage.setItem('aesspos_exp',    String(cbExp));
     localStorage.setItem('aesspos_user',   JSON.stringify(cbUser));
     localStorage.setItem('aesspos_tienda', 'null');
+    _clearDataCache();
     await iniciarApp(cbUser, null);
     return;
   }
@@ -5840,8 +5841,9 @@ function iniciarCheckExpiracion() {
         }
         // Sesión válida: refrescar datos silenciosamente
         await loadData();
+        renderCatPills(); refreshCatDatalist();
         renderProducts(); renderCart(); renderInventario(); renderReportes();
-        updateLowStockBadge();
+        updateLowStockBadge(); updateCajaBar();
       })
       .catch(() => showToast('⚠ Sin conexión — usando datos guardados'));
   } else {
@@ -5853,6 +5855,7 @@ function iniciarCheckExpiracion() {
       });
       if (!res.ok) {
         _AUTH_KEYS.forEach(k => localStorage.removeItem(k));
+        _clearDataCache();
         showLoginScreen('Sesión expirada. Ingresa de nuevo.');
         return;
       }
