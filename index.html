@@ -2874,6 +2874,7 @@ async function apiFetch(url, options = {}) {
   const res = await fetch(url, { ...options, headers });
   if (res.status === 401) {
     ['aesspos_token','aesspos_exp','aesspos_user','aesspos_tienda'].forEach(k => localStorage.removeItem(k));
+    _clearDataCache();
     showLoginScreen('Sesión expirada. Ingresa de nuevo.');
     return null;
   }
