@@ -3697,48 +3697,45 @@ async function lookupFillModal(barcode) {
     }
   }
   if (!data.found) {
-      // Aún podría traer precio sugerido e imagen desde MercadoLibre
-      if (data.precio_sugerido) {
-        _applyMeliPrice(data.precio_sugerido);
-        if (status) status.textContent = '💰 Precio sugerido de MercadoLibre';
-        showToast('💰 Producto no identificado — se sugiere precio por MercadoLibre');
-      } else {
-        if (status) status.textContent = '';
-      }
-      if (data.thumbnail) {
-        const parts = data.thumbnail.split(',');
-        currentMediaType = (parts[0].match(/:(.*?);/) || [])[1] || 'image/jpeg';
-        currentImageB64  = parts[1];
-        thumbnailChanged = true;
-        document.getElementById('photo-img').src = data.thumbnail;
-        document.getElementById('photo-preview').style.display = 'block';
-        document.getElementById('photo-zone').style.display    = 'none';
-      }
-      document.getElementById('prod-name').focus();
-      return;
-    }
-    const p = data.product;
-    document.getElementById('prod-name').value  = p.name;
-    document.getElementById('prod-cat').value   = p.cat;
-    document.getElementById('prod-emoji').value = p.emoji;
-    if (p.thumbnail) {
-      const parts = p.thumbnail.split(',');
-      currentMediaType = (parts[0].match(/:(.*?);/) || [])[1] || 'image/jpeg';
-      currentImageB64  = parts[1];
-      thumbnailChanged = true;
-      document.getElementById('photo-img').src = p.thumbnail;
-      document.getElementById('photo-preview').style.display = 'block';
-      document.getElementById('photo-zone').style.display    = 'none';
-      if (status) status.textContent = '✅ Datos de Open Food Facts';
+    // Aún podría traer precio sugerido e imagen desde MercadoLibre
+    if (data.precio_sugerido) {
+      _applyMeliPrice(data.precio_sugerido);
+      if (status) status.textContent = '💰 Precio sugerido de MercadoLibre';
+      showToast('💰 Producto no identificado — se sugiere precio por MercadoLibre');
     } else {
       if (status) status.textContent = '';
     }
-    _applyMeliPrice(p.precio_sugerido);
-    document.getElementById('prod-price').focus();
-    showToast(`✅ "${p.name}" encontrado — revisa el precio sugerido`);
-  } catch (err) {
+    if (data.thumbnail) {
+      const parts = data.thumbnail.split(',');
+      currentMediaType = (parts[0].match(/:(.*?);/) || [])[1] || 'image/jpeg';
+      currentImageB64  = parts[1];
+      thumbnailChanged = true;
+      document.getElementById('photo-img').src = data.thumbnail;
+      document.getElementById('photo-preview').style.display = 'block';
+      document.getElementById('photo-zone').style.display    = 'none';
+    }
+    document.getElementById('prod-name').focus();
+    return;
+  }
+  const p = data.product;
+  document.getElementById('prod-name').value  = p.name;
+  document.getElementById('prod-cat').value   = p.cat;
+  document.getElementById('prod-emoji').value = p.emoji;
+  if (p.thumbnail) {
+    const parts = p.thumbnail.split(',');
+    currentMediaType = (parts[0].match(/:(.*?);/) || [])[1] || 'image/jpeg';
+    currentImageB64  = parts[1];
+    thumbnailChanged = true;
+    document.getElementById('photo-img').src = p.thumbnail;
+    document.getElementById('photo-preview').style.display = 'block';
+    document.getElementById('photo-zone').style.display    = 'none';
+    if (status) status.textContent = '✅ Datos de Open Food Facts';
+  } else {
     if (status) status.textContent = '';
   }
+  _applyMeliPrice(p.precio_sugerido);
+  document.getElementById('prod-price').focus();
+  showToast(`✅ "${p.name}" encontrado — revisa el precio sugerido`);
 }
 
 function _applyMeliPrice(ps) {
