@@ -3925,6 +3925,11 @@ function renderCart() {
 
 // ─── PAGO ─────────────────────────────────────
 function openPayModal(method) {
+  if (!cajaSession) {
+    showToast('⚠ Abre la caja antes de cobrar', 'warning');
+    openModal('modal-apertura');
+    return;
+  }
   if (!cart.length) { showToast('El carrito está vacío'); return; }
   currentPayMethod = method;
   updatePayModal();
@@ -3969,6 +3974,12 @@ function _restoreStockFromSale(items) {
 }
 
 async function completarVenta() {
+  if (!cajaSession) {
+    closeModal('modal-pago');
+    showToast('⚠ Abre la caja antes de cobrar', 'warning');
+    openModal('modal-apertura');
+    return;
+  }
   const btnCobrar = document.getElementById('btn-cobrar');
   if (btnCobrar) btnCobrar.disabled = true; // prevenir doble toque en tablet
 
