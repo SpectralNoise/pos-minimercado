@@ -4285,7 +4285,7 @@ function renderInventario() {
       <td class="right" style="font-family:var(--ff-mono);font-size:13px">${(() => {
         if (!p.precio_compra) return '<span style="color:var(--text-3)">—</span>';
         const g = p.price - p.precio_compra;
-        const m = ((g / p.precio_compra) * 100).toFixed(0);
+        const m = ((g / p.price) * 100).toFixed(0);
         const c = g >= 0 ? 'var(--success,#16a34a)' : 'var(--danger,#dc2626)';
         return `<span style="color:${c};font-weight:600">${m}%</span>`;
       })()}</td>
