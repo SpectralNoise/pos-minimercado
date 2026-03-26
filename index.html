@@ -3085,7 +3085,7 @@ function _saveDataCache() {
       v:          POS_CACHE_VERSION,
       ts:         Date.now(),
       tienda_id:  currentUser?.tienda?.id ?? null,
-      products:   products,
+      products:   products.map(({ thumbnail, ...p }) => p),
       sales:      sales.map(s => ({ ...s, date: s.date instanceof Date ? s.date.toISOString() : s.date })),
       cajaSession: cajaSession ? {
         ...cajaSession,
