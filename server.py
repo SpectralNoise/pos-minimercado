@@ -1000,6 +1000,8 @@ class Handler(BaseHTTPRequestHandler):
                 self.send_json({"tiendas": result})
             finally:
                 conn.close()
+        elif path == "/api/sync":
+            self._get_sync()
         elif path == "/api/turnos/activo":
             self._get_turno_activo()
         elif path == "/api/turnos":
@@ -1640,6 +1642,62 @@ Al final, un consejo breve sobre los productos sin rotación."""
             self.send_json({"ok": True, "pedido": msg.content[0].text.strip()})
         except Exception as e:
             self.send_error_json(str(e), 500)
+
+    def _get_sync(self):
+        """Retorna productos + ventas + turno activo en una sola petición (F4)."""
+        ctx = self.require_auth()
+        if not ctx: return
+        conn = get_db()
+        try:
+            # ── Productos ────────────────────────────────────────────────
+            if ctx.rol == 'superadmin':
+                prod_rows = conn.execute(
+                    "SELECT id,emoji,name,barcode,cat,price,precio_compra,stock,alert,"
+                    "(thumbnail IS NOT NULL AND thumbnail != '') AS has_thumbnail "
+                    "FROM productos ORDER BY name"
+                ).fetchall()
+            else:
+                prod_rows = conn.execute(
+                    "SELECT id,emoji,name,barcode,cat,price,precio_compra,stock,alert,"
+                    "(thumbnail IS NOT NULL AND thumbnail != '') AS has_thumbnail "
+                    "FROM productos WHERE tienda_id=? ORDER BY name",
+                    (ctx.tienda_id,)
+                ).fetchall()
+            productos = [row_to_dict(r) for r in prod_rows]
+
+            # ── Ventas (últimas 500) ─────────────────────────────────────
+            if ctx.rol == 'superadmin':
+                venta_rows = conn.execute(
+                    "SELECT * FROM ventas ORDER BY created_at DESC LIMIT 500"
+                ).fetchall()
+            else:
+                venta_rows = conn.execute(
+                    "SELECT * FROM ventas WHERE tienda_id=? ORDER BY created_at DESC LIMIT 500",
+                    (ctx.tienda_id,)
+                ).fetchall()
+            ventas = []
+            for v in venta_rows:
+                vd = row_to_dict(v)
+                items = conn.execute(
+                    "SELECT * FROM items_venta WHERE venta_id=?", (v["id"],)
+                ).fetchall()
+                vd["items"] = [row_to_dict(i) for i in items]
+                ventas.append(vd)
+
+            # ── Turno activo ─────────────────────────────────────────────
+            if ctx.rol == 'superadmin':
+                turno = None  # superadmin no tiene turno
+            else:
+                turno_row = conn.execute(
+                    "SELECT * FROM turnos WHERE tienda_id=? AND estado='abierto' "
+                    "ORDER BY apertura_at DESC LIMIT 1",
+                    (ctx.tienda_id,)
+                ).fetchone()
+                turno = row_to_dict(turno_row) if turno_row else None
+
+            self.send_json({"productos": productos, "ventas": ventas, "turno": turno})
+        finally:
+            conn.close()
 
     # ── TURNOS ─────────────────────────────────────────────────────
     def _get_turno_activo(self):

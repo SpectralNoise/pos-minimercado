@@ -2874,6 +2874,7 @@ async function apiFetch(url, options = {}) {
   const res = await fetch(url, { ...options, headers });
   if (res.status === 401) {
     ['aesspos_token','aesspos_exp','aesspos_user','aesspos_tienda'].forEach(k => localStorage.removeItem(k));
+    _clearDataCache();
     showLoginScreen('Sesión expirada. Ingresa de nuevo.');
     return null;
   }
@@ -3017,6 +3018,7 @@ async function doLogout() {
   if (!ok) return;
   if (_expiryCheckInterval) { clearInterval(_expiryCheckInterval); _expiryCheckInterval = null; }
   ['aesspos_token','aesspos_exp','aesspos_user','aesspos_tienda'].forEach(k => localStorage.removeItem(k));
+  _clearDataCache();
   location.reload();
 }
 
@@ -3074,31 +3076,76 @@ function normalizarVenta(v) {
   };
 }
 
+// ─── DATA CACHE (F1: hidratación instantánea) ───────────────────────
+const POS_CACHE_KEY     = 'pos_data_cache';
+const POS_CACHE_VERSION = 1;
+const POS_CACHE_MAX_AGE = 24 * 60 * 60 * 1000; // 24h
+
+function _saveDataCache() {
+  try {
+    localStorage.setItem(POS_CACHE_KEY, JSON.stringify({
+      v:          POS_CACHE_VERSION,
+      ts:         Date.now(),
+      tienda_id:  currentUser?.tienda?.id ?? null,
+      products:   products.map(({ thumbnail, ...p }) => p),
+      sales:      sales.map(s => ({ ...s, date: s.date instanceof Date ? s.date.toISOString() : s.date })),
+      cajaSession: cajaSession ? {
+        ...cajaSession,
+        inicio: cajaSession.inicio instanceof Date ? cajaSession.inicio.toISOString() : cajaSession.inicio
+      } : null
+    }));
+  } catch(e) { /* localStorage lleno — fallar en silencio */ }
+}
+
+function _readDataCache(expectedTiendaId) {
+  try {
+    const raw = localStorage.getItem(POS_CACHE_KEY);
+    if (!raw) return null;
+    const d = JSON.parse(raw);
+    if (d.v !== POS_CACHE_VERSION) return null;
+    if (Date.now() - d.ts > POS_CACHE_MAX_AGE) return null;
+    if (expectedTiendaId !== undefined && d.tienda_id !== expectedTiendaId) return null;
+    d.sales = (d.sales || []).map(s => ({ ...s, date: new Date(s.date) }));
+    if (d.cajaSession?.inicio) d.cajaSession.inicio = new Date(d.cajaSession.inicio);
+    return d;
+  } catch(e) { return null; }
+}
+
+function _clearDataCache() {
+  localStorage.removeItem(POS_CACHE_KEY);
+}
+
 async function loadData() {
   try {
-    const [pRes, vRes, tRes] = await Promise.all([
-      apiFetch('/api/productos'),
-      apiFetch('/api/ventas'),
-      apiFetch('/api/turnos/activo')
-    ]);
-    if (!pRes || !vRes || !tRes) return; // sesión expirada
-    if (!pRes.ok) { showToast(`⚠ Error cargando inventario (${pRes.status})`); return; }
-    products = await pRes.json();
+    const res = await apiFetch('/api/sync');
+    if (!res) return; // sesión expirada — apiFetch ya llamó showLoginScreen
+    if (!res.ok) { showToast(`⚠ Error cargando datos (${res.status})`); return; }
+    const sync = await res.json();
+
+    products = sync.productos;
     if (!Array.isArray(products)) { showToast('⚠ Respuesta de inventario inválida'); products = []; }
-    sales    = (await vRes.json()).map(normalizarVenta);
-    const turnoActivo = await tRes.json();
+
+    sales = (sync.ventas || []).map(normalizarVenta);
+
+    const turnoActivo = sync.turno;
     if (turnoActivo && turnoActivo.id) {
       cajaSession = {
         id:           turnoActivo.id,
         cajero:       turnoActivo.cajero,
-        inicio:       new Date(turnoActivo.apertura_at.replace(' ','T')),
+        inicio:       new Date(turnoActivo.apertura_at.replace(' ', 'T')),
         montoInicial: turnoActivo.monto_inicial,
         ventasIds:    sales.filter(s => s.turno_id === turnoActivo.id).map(s => s.id)
       };
       updateCajaBar();
+    } else if (cajaSession) {
+      // El turno fue cerrado externamente — limpiar sesión local
+      cajaSession = null;
+      updateCajaBar();
     }
+
     // Cargar thumbnails en background (no bloquea el render inicial)
     _loadThumbnailsBackground();
+    _saveDataCache(); // F1: mantener caché actualizada
   } catch (err) {
     showToast('⚠ Error cargando datos del servidor');
   }
@@ -3558,81 +3605,64 @@ function closeCameraScanner() {
   _camScanCount = 0;
 }
 
+// ─── BARCODE CACHE (F5: 0ms para barcodes ya conocidos) ─────────────
+const BARCODE_CACHE_KEY = 'pos_barcode_cache';
+const BARCODE_CACHE_MAX = 500; // límite para no saturar localStorage
+
+function _getBarcodeCache(barcode) {
+  try {
+    const raw = localStorage.getItem(BARCODE_CACHE_KEY);
+    if (!raw) return null;
+    return JSON.parse(raw)[barcode] ?? null;
+  } catch(e) { return null; }
+}
+
+function _setBarcodeCache(barcode, data) {
+  try {
+    const raw   = localStorage.getItem(BARCODE_CACHE_KEY);
+    const cache = raw ? JSON.parse(raw) : {};
+    cache[barcode] = data;
+    // Eviction FIFO si supera el límite
+    const keys = Object.keys(cache);
+    if (keys.length > BARCODE_CACHE_MAX) {
+      keys.slice(0, keys.length - BARCODE_CACHE_MAX).forEach(k => delete cache[k]);
+    }
+    localStorage.setItem(BARCODE_CACHE_KEY, JSON.stringify(cache));
+  } catch(e) { /* fail silently */ }
+}
+
 // ─── OPEN FOOD FACTS LOOKUP ────────────────────────────────────────
 
 // Busca el código en Open Food Facts y ofrece agregar el producto al inventario
 async function lookupAndOffer(barcode) {
-  showToast(`🔍 Buscando código ${barcode}...`);
-  try {
-    const res  = await apiFetch(`/api/lookup-barcode/${encodeURIComponent(barcode)}`);
-    if (!res) return;
-    const data = await res.json();
-    if (!data.found) {
-      showToast(`⚠ Código no encontrado: ${barcode}`);
+  // F5: verificar caché antes de llamar a la red
+  let data = _getBarcodeCache(barcode);
+  if (!data) {
+    showToast(`🔍 Buscando código ${barcode}...`);
+    try {
+      const res = await apiFetch(`/api/lookup-barcode/${encodeURIComponent(barcode)}`);
+      if (!res) return;
+      data = await res.json();
+      if (data.found) _setBarcodeCache(barcode, data);
+    } catch (err) {
+      showToast(`⚠ Error de búsqueda: ${err.message}`);
       return;
     }
-    const p = data.product;
-    // Abrir modal de producto pre-llenado para agregarlo al inventario
-    const confirmed = await showConfirm(`"${p.name}" (${p.cat})\n\n¿Agregar al inventario?`, { title: '🛒 Producto encontrado', okLabel: 'Agregar', icon: '🛒' });
-    if (!confirmed) return;
-    openProdModal();
-    setTimeout(() => {
-      document.getElementById('prod-name').value    = p.name;
-      document.getElementById('prod-barcode').value = p.barcode;
-      document.getElementById('prod-cat').value     = p.cat;
-      document.getElementById('prod-emoji').value   = p.emoji;
-      if (p.thumbnail) {
-        const parts = p.thumbnail.split(',');
-        currentMediaType = (parts[0].match(/:(.*?);/) || [])[1] || 'image/jpeg';
-        currentImageB64  = parts[1];
-        thumbnailChanged = true;
-        document.getElementById('photo-img').src = p.thumbnail;
-        document.getElementById('photo-preview').style.display = 'block';
-        document.getElementById('photo-zone').style.display    = 'none';
-        document.getElementById('analyze-status').textContent  = '✅ Imagen de Open Food Facts';
-      }
-      _applyMeliPrice(p.precio_sugerido);
-      document.getElementById('prod-price').focus();
-      showToast(`✅ Datos pre-llenados — revisa el precio sugerido`);
-    }, 200);
-  } catch (err) {
-    showToast(`⚠ Error de búsqueda: ${err.message}`);
   }
-}
-
-// Busca y pre-llena el modal de inventario (llamado al escanear en el modal)
-async function lookupFillModal(barcode) {
-  const status = document.getElementById('analyze-status');
-  if (status) status.textContent = '🔍 Buscando en base de datos...';
-  try {
-    const res  = await apiFetch(`/api/lookup-barcode/${encodeURIComponent(barcode)}`);
-    if (!res) return;
-    const data = await res.json();
-    if (!data.found) {
-      // Aún podría traer precio sugerido e imagen desde MercadoLibre
-      if (data.precio_sugerido) {
-        _applyMeliPrice(data.precio_sugerido);
-        if (status) status.textContent = '💰 Precio sugerido de MercadoLibre';
-        showToast('💰 Producto no identificado — se sugiere precio por MercadoLibre');
-      } else {
-        if (status) status.textContent = '';
-      }
-      if (data.thumbnail) {
-        const parts = data.thumbnail.split(',');
-        currentMediaType = (parts[0].match(/:(.*?);/) || [])[1] || 'image/jpeg';
-        currentImageB64  = parts[1];
-        thumbnailChanged = true;
-        document.getElementById('photo-img').src = data.thumbnail;
-        document.getElementById('photo-preview').style.display = 'block';
-        document.getElementById('photo-zone').style.display    = 'none';
-      }
-      document.getElementById('prod-name').focus();
-      return;
-    }
-    const p = data.product;
-    document.getElementById('prod-name').value  = p.name;
-    document.getElementById('prod-cat').value   = p.cat;
-    document.getElementById('prod-emoji').value = p.emoji;
+  if (!data.found) {
+    showToast(`⚠ Código no encontrado: ${barcode}`);
+    return;
+  }
+  const p = data.product;
+  // Abrir modal de producto pre-llenado para agregarlo al inventario
+  const confirmed = await showConfirm(`"${p.name}" (${p.cat})\n\n¿Agregar al inventario?`, { title: '🛒 Producto encontrado', okLabel: 'Agregar', icon: '🛒' });
+  if (!confirmed) return;
+  openProdModal();
+  setTimeout(() => {
+    document.getElementById('prod-name').value    = p.name;
+    document.getElementById('prod-barcode').value = p.barcode;
+    document.getElementById('prod-cat').value     = p.cat;
+    document.getElementById('prod-emoji').value   = p.emoji;
     if (p.thumbnail) {
       const parts = p.thumbnail.split(',');
       currentMediaType = (parts[0].match(/:(.*?);/) || [])[1] || 'image/jpeg';
@@ -3641,16 +3671,71 @@ async function lookupFillModal(barcode) {
       document.getElementById('photo-img').src = p.thumbnail;
       document.getElementById('photo-preview').style.display = 'block';
       document.getElementById('photo-zone').style.display    = 'none';
-      if (status) status.textContent = '✅ Datos de Open Food Facts';
-    } else {
-      if (status) status.textContent = '';
+      document.getElementById('analyze-status').textContent  = '✅ Imagen de Open Food Facts';
     }
     _applyMeliPrice(p.precio_sugerido);
     document.getElementById('prod-price').focus();
-    showToast(`✅ "${p.name}" encontrado — revisa el precio sugerido`);
-  } catch (err) {
+    showToast(`✅ Datos pre-llenados — revisa el precio sugerido`);
+  }, 200);
+}
+
+// Busca y pre-llena el modal de inventario (llamado al escanear en el modal)
+async function lookupFillModal(barcode) {
+  const status = document.getElementById('analyze-status');
+  // F5: verificar caché antes de llamar a la red
+  let data = _getBarcodeCache(barcode);
+  if (!data) {
+    if (status) status.textContent = '🔍 Buscando en base de datos...';
+    try {
+      const res = await apiFetch(`/api/lookup-barcode/${encodeURIComponent(barcode)}`);
+      if (!res) return;
+      data = await res.json();
+      if (data.found) _setBarcodeCache(barcode, data);
+    } catch (err) {
+      if (status) status.textContent = '';
+      return;
+    }
+  }
+  if (!data.found) {
+    // Aún podría traer precio sugerido e imagen desde MercadoLibre
+    if (data.precio_sugerido) {
+      _applyMeliPrice(data.precio_sugerido);
+      if (status) status.textContent = '💰 Precio sugerido de MercadoLibre';
+      showToast('💰 Producto no identificado — se sugiere precio por MercadoLibre');
+    } else {
+      if (status) status.textContent = '';
+    }
+    if (data.thumbnail) {
+      const parts = data.thumbnail.split(',');
+      currentMediaType = (parts[0].match(/:(.*?);/) || [])[1] || 'image/jpeg';
+      currentImageB64  = parts[1];
+      thumbnailChanged = true;
+      document.getElementById('photo-img').src = data.thumbnail;
+      document.getElementById('photo-preview').style.display = 'block';
+      document.getElementById('photo-zone').style.display    = 'none';
+    }
+    document.getElementById('prod-name').focus();
+    return;
+  }
+  const p = data.product;
+  document.getElementById('prod-name').value  = p.name;
+  document.getElementById('prod-cat').value   = p.cat;
+  document.getElementById('prod-emoji').value = p.emoji;
+  if (p.thumbnail) {
+    const parts = p.thumbnail.split(',');
+    currentMediaType = (parts[0].match(/:(.*?);/) || [])[1] || 'image/jpeg';
+    currentImageB64  = parts[1];
+    thumbnailChanged = true;
+    document.getElementById('photo-img').src = p.thumbnail;
+    document.getElementById('photo-preview').style.display = 'block';
+    document.getElementById('photo-zone').style.display    = 'none';
+    if (status) status.textContent = '✅ Datos de Open Food Facts';
+  } else {
     if (status) status.textContent = '';
   }
+  _applyMeliPrice(p.precio_sugerido);
+  document.getElementById('prod-price').focus();
+  showToast(`✅ "${p.name}" encontrado — revisa el precio sugerido`);
 }
 
 function _applyMeliPrice(ps) {
@@ -3883,51 +3968,96 @@ function calcCambio() {
   document.getElementById('btn-cobrar').disabled = cambio < 0;
 }
 
-async function completarVenta() {
-  const total = cart.reduce((s,i) => s+i.price*i.qty, 0);
-  const recibido = currentPayMethod === 'efectivo'
-    ? parseMoney('recibido-input')
-    : total;
+// F2: restaurar stock si el POST falla después de un optimistic update
+function _restoreStockFromSale(items) {
+  items.forEach(item => {
+    const prod = products.find(p => p.id === item.id);
+    if (prod != null) prod.stock += item.qty;
+  });
+}
 
+async function completarVenta() {
+  const btnCobrar = document.getElementById('btn-cobrar');
+  if (btnCobrar) btnCobrar.disabled = true; // prevenir doble toque en tablet
+
+  const total     = cart.reduce((s,i) => s+i.price*i.qty, 0);
+  const recibido  = currentPayMethod === 'efectivo' ? parseMoney('recibido-input') : total;
+  const saleItems = cart.map(i => ({ id: i.id, name: i.name, emoji: i.emoji, qty: i.qty, price: i.price }));
+
+  // F2: decremento optimista de stock antes de esperar respuesta de red
+  saleItems.forEach(item => {
+    const prod = products.find(p => p.id === item.id);
+    if (prod != null) prod.stock -= item.qty;
+  });
+
+  // F2: ID temporal negativo — no colisiona con IDs reales del servidor (positivos)
+  const tempId = -(Date.now());
+  lastSale = {
+    id:       tempId,
+    turno_id: cajaSession?.id ?? null,
+    items:    saleItems,
+    total,
+    method:   currentPayMethod,
+    recibido,
+    cambio:   recibido - total,
+    date:     new Date()
+  };
+  sales.unshift(lastSale);
+  if (cajaSession) cajaSession.ventasIds.push(tempId);
+
+  // Mostrar recibo INMEDIATAMENTE — antes de confirmar con el servidor
+  closeModal('modal-pago');
+  showRecibo();
+
+  // POST al servidor en segundo plano
   try {
     const res = await apiFetch('/api/ventas', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         total,
-        metodo: currentPayMethod,
+        metodo:   currentPayMethod,
         recibido,
         turno_id: cajaSession?.id ?? null,
-        items: cart.map(i => ({ id: i.id, name: i.name, emoji: i.emoji, qty: i.qty, price: i.price }))
+        items:    saleItems
       })
     });
-    if (!res) return;
+    if (!res) {
+      // 401: apiFetch ya llamó showLoginScreen — revertir estado optimista
+      closeModal('modal-recibo');
+      _restoreStockFromSale(saleItems);
+      renderProducts();
+      const idx = sales.indexOf(lastSale);
+      if (idx !== -1) sales.splice(idx, 1);
+      if (cajaSession) cajaSession.ventasIds = cajaSession.ventasIds.filter(id => id !== tempId);
+      return;
+    }
     const data = await res.json();
-    if (!res.ok) throw new Error(data.error);
+    if (!res.ok) throw new Error(data.error || 'Error desconocido');
 
-    lastSale = {
-      id:       data.venta.id,
-      turno_id: cajaSession?.id ?? null,
-      items:    cart.map(i => ({ name: i.name, emoji: i.emoji, qty: i.qty, price: i.price })),
-      total,
-      method:   currentPayMethod,
-      recibido,
-      cambio:   recibido - total,
-      date:     new Date()
-    };
-    sales.unshift(lastSale);
-    if (cajaSession) cajaSession.ventasIds.push(lastSale.id);
-
-    // Mostrar recibo INMEDIATAMENTE — sin esperar recarga de productos
-    closeModal('modal-pago');
-    showRecibo();
-
-    // Recargar stock en segundo plano (no bloquea UI)
-    apiFetch('/api/productos').then(r => r && r.json()).then(data => {
-      if (data) { products = data; _loadThumbnailsBackground(); updateLowStockBadge(); renderProducts(); }
-    }).catch(() => { /* fallo silencioso — stock se actualiza en la próxima interacción */ });
+    // Actualizar el ID temporal con el ID real asignado por el servidor
+    const idx = sales.indexOf(lastSale);
+    if (idx !== -1) sales[idx].id = data.venta.id;
+    lastSale.id = data.venta.id;
+    if (cajaSession) {
+      cajaSession.ventasIds = cajaSession.ventasIds.map(id => id === tempId ? data.venta.id : id);
+    }
+    // Refrescar stock desde servidor en segundo plano (confirmar descuentos exactos)
+    apiFetch('/api/productos').then(r => r && r.json()).then(serverProds => {
+      if (serverProds) { products = serverProds; _loadThumbnailsBackground(); updateLowStockBadge(); renderProducts(); _saveDataCache(); }
+    }).catch(() => { /* stock se sincroniza en la próxima carga */ });
   } catch (err) {
+    // Revertir estado optimista — el servidor rechazó la venta
+    closeModal('modal-recibo');
+    _restoreStockFromSale(saleItems);
+    renderProducts();
+    const idx = sales.indexOf(lastSale);
+    if (idx !== -1) sales.splice(idx, 1);
+    if (cajaSession) cajaSession.ventasIds = cajaSession.ventasIds.filter(id => id !== tempId);
+    lastSale = null;
+    if (btnCobrar) btnCobrar.disabled = false;
     showToast('⚠ Error al registrar venta: ' + err.message);
+    openModal('modal-pago'); // reabrir para que el cajero reintente
   }
 }
 
@@ -5069,7 +5199,7 @@ if (savedTheme === 'dark') document.documentElement.dataset.theme = 'dark';
 updateThemeIcon();
 
 // ── BOOT ───────────────────────────────────────────────────────────
-async function iniciarApp(user, tienda) {
+async function iniciarApp(user, tienda, opts = {}) {
   currentUser = { ...user, tienda };
   // Ocultar switcher modo — lo determina el rol
   document.querySelector('.mode-switcher').style.display = 'none';
@@ -5104,7 +5234,9 @@ async function iniciarApp(user, tienda) {
     }
     setMode(modo);
     updateCajaBar();
-    await loadData();
+    if (!opts.skipLoadData) {
+      await loadData();
+    }
     renderCatPills();
     refreshCatDatalist();
     renderProducts();
@@ -5748,6 +5880,7 @@ function iniciarCheckExpiracion() {
     localStorage.setItem('aesspos_exp',    String(cbExp));
     localStorage.setItem('aesspos_user',   JSON.stringify(cbUser));
     localStorage.setItem('aesspos_tienda', 'null');
+    _clearDataCache();
     await iniciarApp(cbUser, null);
     return;
   }
@@ -5759,33 +5892,66 @@ function iniciarCheckExpiracion() {
     return;
   }
 
-  const token = localStorage.getItem('aesspos_token');
-  const exp   = parseInt(localStorage.getItem('aesspos_exp') || '0');
-  const ahora = Math.floor(Date.now() / 1000);
+  const token  = localStorage.getItem('aesspos_token');
+  const exp    = parseInt(localStorage.getItem('aesspos_exp') || '0');
+  const ahora  = Math.floor(Date.now() / 1000);
+  const _AUTH_KEYS = ['aesspos_token','aesspos_exp','aesspos_user','aesspos_tienda'];
 
   if (!token || exp < ahora) {
-    ['aesspos_token','aesspos_exp','aesspos_user','aesspos_tienda'].forEach(k => localStorage.removeItem(k));
+    _AUTH_KEYS.forEach(k => localStorage.removeItem(k));
+    _clearDataCache();
     showLoginScreen();
     return;
   }
 
-  // Validar token con el servidor.
-  // NOTA: usamos fetch() directamente (no apiFetch) porque apiFetch llama showLoginScreen()
-  // en 401, lo que crearía un ciclo si la sesión ya expiró. Este es el único lugar donde
-  // se maneja el 401 manualmente en el boot.
-  try {
-    const res = await fetch('/api/auth/me', {
-      headers: { 'Authorization': `Bearer ${token}` }
-    });
-    if (!res.ok) {
-      ['aesspos_token','aesspos_exp','aesspos_user','aesspos_tienda'].forEach(k => localStorage.removeItem(k));
-      showLoginScreen('Sesión expirada. Ingresa de nuevo.');
-      return;
+  // F1: intentar hidratación instantánea desde caché
+  const cachedUser   = JSON.parse(localStorage.getItem('aesspos_user')   || 'null');
+  const cachedTienda = JSON.parse(localStorage.getItem('aesspos_tienda') || 'null');
+  const dataCache    = _readDataCache(cachedTienda?.id ?? undefined);
+  const hasCache     = !!(cachedUser && cachedTienda && dataCache);
+
+  if (hasCache) {
+    // Hidratar estado desde caché — UI visible en ~10ms sin esperar red
+    products    = dataCache.products;
+    sales       = dataCache.sales;
+    cajaSession = dataCache.cajaSession;
+    await iniciarApp(cachedUser, cachedTienda, { skipLoadData: true });
+
+    // Validar sesión + refrescar datos en segundo plano (fire-and-forget)
+    // NOTA: fetch() directo (no apiFetch) igual que el flujo original del boot
+    fetch('/api/auth/me', { headers: { 'Authorization': `Bearer ${token}` } })
+      .then(async res => {
+        if (!res.ok) {
+          _AUTH_KEYS.forEach(k => localStorage.removeItem(k));
+          _clearDataCache();
+          showLoginScreen('Sesión expirada. Ingresa de nuevo.');
+          return;
+        }
+        // Sesión válida: refrescar datos silenciosamente
+        await loadData();
+        renderCatPills(); refreshCatDatalist();
+        renderProducts(); renderCart(); renderInventario(); renderReportes();
+        updateLowStockBadge(); updateCajaBar();
+      })
+      .catch(() => showToast('⚠ Sin conexión — usando datos guardados'));
+  } else {
+    // Sin caché: flujo bloqueante normal (primera visita o caché expirada)
+    // NOTA: fetch() directo (no apiFetch) para evitar ciclo si la sesión expiró
+    try {
+      const res = await fetch('/api/auth/me', {
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+      if (!res.ok) {
+        _AUTH_KEYS.forEach(k => localStorage.removeItem(k));
+        _clearDataCache();
+        showLoginScreen('Sesión expirada. Ingresa de nuevo.');
+        return;
+      }
+      const data = await res.json();
+      await iniciarApp(data.user, data.tienda);
+    } catch(e) {
+      showLoginScreen('Error de conexión. Intenta de nuevo.');
     }
-    const data = await res.json();
-    await iniciarApp(data.user, data.tienda);
-  } catch(e) {
-    showLoginScreen('Error de conexión. Intenta de nuevo.');
   }
 })();
 
