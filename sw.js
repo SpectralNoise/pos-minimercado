@@ -48,15 +48,19 @@ async function staleWhileRevalidate(request) {
   const networkFetch = fetch(request)
     .then(res => { if (res.ok) cache.put(request, res.clone()); return res; })
     .catch(() => null);
-  // Responder con caché inmediatamente si existe, si no esperar red
-  return cached ?? await networkFetch;
+  // Responder con caché inmediatamente si existe, si no esperar red, si no 503
+  return cached ?? await networkFetch ?? new Response('Servicio no disponible', { status: 503 });
 }
 
 async function cacheFirst(request) {
   const cache  = await caches.open(CACHE_NAME);
   const cached = await cache.match(request);
   if (cached) return cached;
-  const res = await fetch(request);
-  if (res.ok) cache.put(request, res.clone());
-  return res;
+  try {
+    const res = await fetch(request);
+    if (res.ok) cache.put(request, res.clone());
+    return res;
+  } catch(e) {
+    return new Response('Servicio no disponible', { status: 503 });
+  }
 }
