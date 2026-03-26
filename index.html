@@ -3925,51 +3925,89 @@ function calcCambio() {
   document.getElementById('btn-cobrar').disabled = cambio < 0;
 }
 
-async function completarVenta() {
-  const total = cart.reduce((s,i) => s+i.price*i.qty, 0);
-  const recibido = currentPayMethod === 'efectivo'
-    ? parseMoney('recibido-input')
-    : total;
+// F2: restaurar stock si el POST falla después de un optimistic update
+function _restoreStockFromSale(items) {
+  items.forEach(item => {
+    const prod = products.find(p => p.id === item.id);
+    if (prod != null) prod.stock += item.qty;
+  });
+}
 
+async function completarVenta() {
+  const total     = cart.reduce((s,i) => s+i.price*i.qty, 0);
+  const recibido  = currentPayMethod === 'efectivo' ? parseMoney('recibido-input') : total;
+  const saleItems = cart.map(i => ({ id: i.id, name: i.name, emoji: i.emoji, qty: i.qty, price: i.price }));
+
+  // F2: decremento optimista de stock antes de esperar respuesta de red
+  saleItems.forEach(item => {
+    const prod = products.find(p => p.id === item.id);
+    if (prod != null) prod.stock -= item.qty;
+  });
+
+  // F2: ID temporal negativo — no colisiona con IDs reales del servidor (positivos)
+  const tempId = -(Date.now());
+  lastSale = {
+    id:       tempId,
+    turno_id: cajaSession?.id ?? null,
+    items:    saleItems,
+    total,
+    method:   currentPayMethod,
+    recibido,
+    cambio:   recibido - total,
+    date:     new Date()
+  };
+  sales.unshift(lastSale);
+  if (cajaSession) cajaSession.ventasIds.push(tempId);
+
+  // Mostrar recibo INMEDIATAMENTE — antes de confirmar con el servidor
+  closeModal('modal-pago');
+  showRecibo();
+
+  // POST al servidor en segundo plano
   try {
     const res = await apiFetch('/api/ventas', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         total,
-        metodo: currentPayMethod,
+        metodo:   currentPayMethod,
         recibido,
         turno_id: cajaSession?.id ?? null,
-        items: cart.map(i => ({ id: i.id, name: i.name, emoji: i.emoji, qty: i.qty, price: i.price }))
+        items:    saleItems
       })
     });
-    if (!res) return;
+    if (!res) {
+      // 401: apiFetch ya llamó showLoginScreen — revertir estado optimista
+      _restoreStockFromSale(saleItems);
+      const idx = sales.indexOf(lastSale);
+      if (idx !== -1) sales.splice(idx, 1);
+      if (cajaSession) cajaSession.ventasIds = cajaSession.ventasIds.filter(id => id !== tempId);
+      return;
+    }
     const data = await res.json();
-    if (!res.ok) throw new Error(data.error);
+    if (!res.ok) throw new Error(data.error || 'Error desconocido');
 
-    lastSale = {
-      id:       data.venta.id,
-      turno_id: cajaSession?.id ?? null,
-      items:    cart.map(i => ({ name: i.name, emoji: i.emoji, qty: i.qty, price: i.price })),
-      total,
-      method:   currentPayMethod,
-      recibido,
-      cambio:   recibido - total,
-      date:     new Date()
-    };
-    sales.unshift(lastSale);
-    if (cajaSession) cajaSession.ventasIds.push(lastSale.id);
-
-    // Mostrar recibo INMEDIATAMENTE — sin esperar recarga de productos
-    closeModal('modal-pago');
-    showRecibo();
-
-    // Recargar stock en segundo plano (no bloquea UI)
-    apiFetch('/api/productos').then(r => r && r.json()).then(data => {
-      if (data) { products = data; _loadThumbnailsBackground(); updateLowStockBadge(); renderProducts(); }
-    }).catch(() => { /* fallo silencioso — stock se actualiza en la próxima interacción */ });
+    // Actualizar el ID temporal con el ID real asignado por el servidor
+    const idx = sales.indexOf(lastSale);
+    if (idx !== -1) sales[idx].id = data.venta.id;
+    lastSale.id = data.venta.id;
+    if (cajaSession) {
+      cajaSession.ventasIds = cajaSession.ventasIds.map(id => id === tempId ? data.venta.id : id);
+    }
+    // Refrescar stock desde servidor en segundo plano (confirmar descuentos exactos)
+    apiFetch('/api/productos').then(r => r && r.json()).then(serverProds => {
+      if (serverProds) { products = serverProds; _loadThumbnailsBackground(); updateLowStockBadge(); renderProducts(); }
+    }).catch(() => { /* stock se sincroniza en la próxima carga */ });
+    _saveDataCache(); // F1: mantener caché actualizada tras venta confirmada
   } catch (err) {
+    // Revertir estado optimista — el servidor rechazó la venta
+    _restoreStockFromSale(saleItems);
+    const idx = sales.indexOf(lastSale);
+    if (idx !== -1) sales.splice(idx, 1);
+    if (cajaSession) cajaSession.ventasIds = cajaSession.ventasIds.filter(id => id !== tempId);
+    lastSale = null;
     showToast('⚠ Error al registrar venta: ' + err.message);
+    openModal('modal-pago'); // reabrir para que el cajero reintente
   }
 }
 
