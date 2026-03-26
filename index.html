@@ -3605,57 +3605,98 @@ function closeCameraScanner() {
   _camScanCount = 0;
 }
 
+// ─── BARCODE CACHE (F5: 0ms para barcodes ya conocidos) ─────────────
+const BARCODE_CACHE_KEY = 'pos_barcode_cache';
+const BARCODE_CACHE_MAX = 500; // límite para no saturar localStorage
+
+function _getBarcodeCache(barcode) {
+  try {
+    const raw = localStorage.getItem(BARCODE_CACHE_KEY);
+    if (!raw) return null;
+    return JSON.parse(raw)[barcode] ?? null;
+  } catch(e) { return null; }
+}
+
+function _setBarcodeCache(barcode, data) {
+  try {
+    const raw   = localStorage.getItem(BARCODE_CACHE_KEY);
+    const cache = raw ? JSON.parse(raw) : {};
+    cache[barcode] = data;
+    // Eviction FIFO si supera el límite
+    const keys = Object.keys(cache);
+    if (keys.length > BARCODE_CACHE_MAX) {
+      keys.slice(0, keys.length - BARCODE_CACHE_MAX).forEach(k => delete cache[k]);
+    }
+    localStorage.setItem(BARCODE_CACHE_KEY, JSON.stringify(cache));
+  } catch(e) { /* fail silently */ }
+}
+
 // ─── OPEN FOOD FACTS LOOKUP ────────────────────────────────────────
 
 // Busca el código en Open Food Facts y ofrece agregar el producto al inventario
 async function lookupAndOffer(barcode) {
-  showToast(`🔍 Buscando código ${barcode}...`);
-  try {
-    const res  = await apiFetch(`/api/lookup-barcode/${encodeURIComponent(barcode)}`);
-    if (!res) return;
-    const data = await res.json();
-    if (!data.found) {
-      showToast(`⚠ Código no encontrado: ${barcode}`);
+  // F5: verificar caché antes de llamar a la red
+  let data = _getBarcodeCache(barcode);
+  if (!data) {
+    showToast(`🔍 Buscando código ${barcode}...`);
+    try {
+      const res = await apiFetch(`/api/lookup-barcode/${encodeURIComponent(barcode)}`);
+      if (!res) return;
+      data = await res.json();
+      if (data.found) _setBarcodeCache(barcode, data);
+    } catch (err) {
+      showToast(`⚠ Error de búsqueda: ${err.message}`);
       return;
     }
-    const p = data.product;
-    // Abrir modal de producto pre-llenado para agregarlo al inventario
-    const confirmed = await showConfirm(`"${p.name}" (${p.cat})\n\n¿Agregar al inventario?`, { title: '🛒 Producto encontrado', okLabel: 'Agregar', icon: '🛒' });
-    if (!confirmed) return;
-    openProdModal();
-    setTimeout(() => {
-      document.getElementById('prod-name').value    = p.name;
-      document.getElementById('prod-barcode').value = p.barcode;
-      document.getElementById('prod-cat').value     = p.cat;
-      document.getElementById('prod-emoji').value   = p.emoji;
-      if (p.thumbnail) {
-        const parts = p.thumbnail.split(',');
-        currentMediaType = (parts[0].match(/:(.*?);/) || [])[1] || 'image/jpeg';
-        currentImageB64  = parts[1];
-        thumbnailChanged = true;
-        document.getElementById('photo-img').src = p.thumbnail;
-        document.getElementById('photo-preview').style.display = 'block';
-        document.getElementById('photo-zone').style.display    = 'none';
-        document.getElementById('analyze-status').textContent  = '✅ Imagen de Open Food Facts';
-      }
-      _applyMeliPrice(p.precio_sugerido);
-      document.getElementById('prod-price').focus();
-      showToast(`✅ Datos pre-llenados — revisa el precio sugerido`);
-    }, 200);
-  } catch (err) {
-    showToast(`⚠ Error de búsqueda: ${err.message}`);
   }
+  if (!data.found) {
+    showToast(`⚠ Código no encontrado: ${barcode}`);
+    return;
+  }
+  const p = data.product;
+  // Abrir modal de producto pre-llenado para agregarlo al inventario
+  const confirmed = await showConfirm(`"${p.name}" (${p.cat})\n\n¿Agregar al inventario?`, { title: '🛒 Producto encontrado', okLabel: 'Agregar', icon: '🛒' });
+  if (!confirmed) return;
+  openProdModal();
+  setTimeout(() => {
+    document.getElementById('prod-name').value    = p.name;
+    document.getElementById('prod-barcode').value = p.barcode;
+    document.getElementById('prod-cat').value     = p.cat;
+    document.getElementById('prod-emoji').value   = p.emoji;
+    if (p.thumbnail) {
+      const parts = p.thumbnail.split(',');
+      currentMediaType = (parts[0].match(/:(.*?);/) || [])[1] || 'image/jpeg';
+      currentImageB64  = parts[1];
+      thumbnailChanged = true;
+      document.getElementById('photo-img').src = p.thumbnail;
+      document.getElementById('photo-preview').style.display = 'block';
+      document.getElementById('photo-zone').style.display    = 'none';
+      document.getElementById('analyze-status').textContent  = '✅ Imagen de Open Food Facts';
+    }
+    _applyMeliPrice(p.precio_sugerido);
+    document.getElementById('prod-price').focus();
+    showToast(`✅ Datos pre-llenados — revisa el precio sugerido`);
+  }, 200);
 }
 
 // Busca y pre-llena el modal de inventario (llamado al escanear en el modal)
 async function lookupFillModal(barcode) {
   const status = document.getElementById('analyze-status');
-  if (status) status.textContent = '🔍 Buscando en base de datos...';
-  try {
-    const res  = await apiFetch(`/api/lookup-barcode/${encodeURIComponent(barcode)}`);
-    if (!res) return;
-    const data = await res.json();
-    if (!data.found) {
+  // F5: verificar caché antes de llamar a la red
+  let data = _getBarcodeCache(barcode);
+  if (!data) {
+    if (status) status.textContent = '🔍 Buscando en base de datos...';
+    try {
+      const res = await apiFetch(`/api/lookup-barcode/${encodeURIComponent(barcode)}`);
+      if (!res) return;
+      data = await res.json();
+      if (data.found) _setBarcodeCache(barcode, data);
+    } catch (err) {
+      if (status) status.textContent = '';
+      return;
+    }
+  }
+  if (!data.found) {
       // Aún podría traer precio sugerido e imagen desde MercadoLibre
       if (data.precio_sugerido) {
         _applyMeliPrice(data.precio_sugerido);
@@ -3939,6 +3980,9 @@ function _restoreStockFromSale(items) {
 }
 
 async function completarVenta() {
+  const btnCobrar = document.getElementById('btn-cobrar');
+  if (btnCobrar) btnCobrar.disabled = true; // prevenir doble toque en tablet
+
   const total     = cart.reduce((s,i) => s+i.price*i.qty, 0);
   const recibido  = currentPayMethod === 'efectivo' ? parseMoney('recibido-input') : total;
   const saleItems = cart.map(i => ({ id: i.id, name: i.name, emoji: i.emoji, qty: i.qty, price: i.price }));
@@ -3983,7 +4027,9 @@ async function completarVenta() {
     });
     if (!res) {
       // 401: apiFetch ya llamó showLoginScreen — revertir estado optimista
+      closeModal('modal-recibo');
       _restoreStockFromSale(saleItems);
+      renderProducts();
       const idx = sales.indexOf(lastSale);
       if (idx !== -1) sales.splice(idx, 1);
       if (cajaSession) cajaSession.ventasIds = cajaSession.ventasIds.filter(id => id !== tempId);
@@ -4006,7 +4052,9 @@ async function completarVenta() {
     _saveDataCache(); // F1: mantener caché actualizada tras venta confirmada
   } catch (err) {
     // Revertir estado optimista — el servidor rechazó la venta
+    closeModal('modal-recibo');
     _restoreStockFromSale(saleItems);
+    renderProducts();
     const idx = sales.indexOf(lastSale);
     if (idx !== -1) sales.splice(idx, 1);
     if (cajaSession) cajaSession.ventasIds = cajaSession.ventasIds.filter(id => id !== tempId);
