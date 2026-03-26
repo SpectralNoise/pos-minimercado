@@ -3017,6 +3017,7 @@ async function doLogout() {
   if (!ok) return;
   if (_expiryCheckInterval) { clearInterval(_expiryCheckInterval); _expiryCheckInterval = null; }
   ['aesspos_token','aesspos_exp','aesspos_user','aesspos_tienda'].forEach(k => localStorage.removeItem(k));
+  _clearDataCache();
   location.reload();
 }
 
@@ -5109,7 +5110,7 @@ if (savedTheme === 'dark') document.documentElement.dataset.theme = 'dark';
 updateThemeIcon();
 
 // ── BOOT ───────────────────────────────────────────────────────────
-async function iniciarApp(user, tienda) {
+async function iniciarApp(user, tienda, opts = {}) {
   currentUser = { ...user, tienda };
   // Ocultar switcher modo — lo determina el rol
   document.querySelector('.mode-switcher').style.display = 'none';
@@ -5144,7 +5145,9 @@ async function iniciarApp(user, tienda) {
     }
     setMode(modo);
     updateCajaBar();
-    await loadData();
+    if (!opts.skipLoadData) {
+      await loadData();
+    }
     renderCatPills();
     refreshCatDatalist();
     renderProducts();
@@ -5799,33 +5802,64 @@ function iniciarCheckExpiracion() {
     return;
   }
 
-  const token = localStorage.getItem('aesspos_token');
-  const exp   = parseInt(localStorage.getItem('aesspos_exp') || '0');
-  const ahora = Math.floor(Date.now() / 1000);
+  const token  = localStorage.getItem('aesspos_token');
+  const exp    = parseInt(localStorage.getItem('aesspos_exp') || '0');
+  const ahora  = Math.floor(Date.now() / 1000);
+  const _AUTH_KEYS = ['aesspos_token','aesspos_exp','aesspos_user','aesspos_tienda'];
 
   if (!token || exp < ahora) {
-    ['aesspos_token','aesspos_exp','aesspos_user','aesspos_tienda'].forEach(k => localStorage.removeItem(k));
+    _AUTH_KEYS.forEach(k => localStorage.removeItem(k));
+    _clearDataCache();
     showLoginScreen();
     return;
   }
 
-  // Validar token con el servidor.
-  // NOTA: usamos fetch() directamente (no apiFetch) porque apiFetch llama showLoginScreen()
-  // en 401, lo que crearía un ciclo si la sesión ya expiró. Este es el único lugar donde
-  // se maneja el 401 manualmente en el boot.
-  try {
-    const res = await fetch('/api/auth/me', {
-      headers: { 'Authorization': `Bearer ${token}` }
-    });
-    if (!res.ok) {
-      ['aesspos_token','aesspos_exp','aesspos_user','aesspos_tienda'].forEach(k => localStorage.removeItem(k));
-      showLoginScreen('Sesión expirada. Ingresa de nuevo.');
-      return;
+  // F1: intentar hidratación instantánea desde caché
+  const cachedUser   = JSON.parse(localStorage.getItem('aesspos_user')   || 'null');
+  const cachedTienda = JSON.parse(localStorage.getItem('aesspos_tienda') || 'null');
+  const dataCache    = _readDataCache(cachedTienda?.id ?? undefined);
+  const hasCache     = !!(cachedUser && cachedTienda && dataCache);
+
+  if (hasCache) {
+    // Hidratar estado desde caché — UI visible en ~10ms sin esperar red
+    products    = dataCache.products;
+    sales       = dataCache.sales;
+    cajaSession = dataCache.cajaSession;
+    await iniciarApp(cachedUser, cachedTienda, { skipLoadData: true });
+
+    // Validar sesión + refrescar datos en segundo plano (fire-and-forget)
+    // NOTA: fetch() directo (no apiFetch) igual que el flujo original del boot
+    fetch('/api/auth/me', { headers: { 'Authorization': `Bearer ${token}` } })
+      .then(async res => {
+        if (!res.ok) {
+          _AUTH_KEYS.forEach(k => localStorage.removeItem(k));
+          _clearDataCache();
+          showLoginScreen('Sesión expirada. Ingresa de nuevo.');
+          return;
+        }
+        // Sesión válida: refrescar datos silenciosamente
+        await loadData();
+        renderProducts(); renderCart(); renderInventario(); renderReportes();
+        updateLowStockBadge();
+      })
+      .catch(() => showToast('⚠ Sin conexión — usando datos guardados'));
+  } else {
+    // Sin caché: flujo bloqueante normal (primera visita o caché expirada)
+    // NOTA: fetch() directo (no apiFetch) para evitar ciclo si la sesión expiró
+    try {
+      const res = await fetch('/api/auth/me', {
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+      if (!res.ok) {
+        _AUTH_KEYS.forEach(k => localStorage.removeItem(k));
+        showLoginScreen('Sesión expirada. Ingresa de nuevo.');
+        return;
+      }
+      const data = await res.json();
+      await iniciarApp(data.user, data.tienda);
+    } catch(e) {
+      showLoginScreen('Error de conexión. Intenta de nuevo.');
     }
-    const data = await res.json();
-    await iniciarApp(data.user, data.tienda);
-  } catch(e) {
-    showLoginScreen('Error de conexión. Intenta de nuevo.');
   }
 })();
 
