@@ -3505,14 +3505,11 @@ let _camStream = null;
 let _camFrame        = null;
 let _camMode         = null;   // 'cobro' | 'inventario' | 'inv-search'
 let _camScanCount    = 0;      // contador de productos escaneados en modo cobro
-let _lastScanCode    = null;   // último código detectado (para debounce)
-let _lastScanTime    = 0;      // timestamp del último scan
-const _CAM_DEBOUNCE  = 2000;   // ms entre scans del mismo código
+const _CAM_COOLDOWN  = 1500;   // ms de pausa después de cada scan (loop detenido)
 
 async function openCameraScanner(mode) {
   _camMode = mode;
   _camScanCount = 0;
-  _lastScanCode = null;
   const overlay   = document.getElementById('cam-overlay');
   const status    = document.getElementById('cam-status');
   const closeBtnEl = document.getElementById('cam-close-btn');
@@ -3553,35 +3550,30 @@ async function openCameraScanner(mode) {
         const results = await detector.detect(video);
         if (results.length > 0) {
           const code = results[0].rawValue;
-          const now  = Date.now();
-          const isDupe = (code === _lastScanCode && now - _lastScanTime < _CAM_DEBOUNCE);
+          status.textContent = `✅ ${code}`;
+          status.className   = 'cam-detected';
 
-          if (!isDupe) {
-            _lastScanCode = code;
-            _lastScanTime = now;
-            status.textContent = `✅ ${code}`;
-            status.className   = 'cam-detected';
-
-            if (isContinuous) {
-              // Modo cobro: procesar sin cerrar, actualizar contador
+          if (isContinuous) {
+            // Modo cobro: procesar y pausar el loop por _CAM_COOLDOWN ms.
+            // Pausa completa evita que el mismo scan se detecte en frames consecutivos.
+            _processScan(code);
+            _camScanCount++;
+            countBadge.textContent = `${_camScanCount} producto${_camScanCount !== 1 ? 's' : ''} agregado${_camScanCount !== 1 ? 's' : ''}`;
+            setTimeout(() => {
+              if (_camStream) {
+                status.textContent = 'Apunta al siguiente código...';
+                status.className   = 'cam-status';
+                _camFrame = requestAnimationFrame(loop); // reanudar solo aquí
+              }
+            }, _CAM_COOLDOWN);
+            return; // NO programar siguiente frame ahora
+          } else {
+            // Modos no-continuos: cerrar tras escanear
+            setTimeout(() => {
+              closeCameraScanner();
               _processScan(code);
-              _camScanCount++;
-              countBadge.textContent = `${_camScanCount} producto${_camScanCount !== 1 ? 's' : ''} agregado${_camScanCount !== 1 ? 's' : ''}`;
-              // Volver al estado "listo" tras 1.2s
-              setTimeout(() => {
-                if (_camStream) {
-                  status.textContent = 'Apunta al siguiente código...';
-                  status.className   = 'cam-status';
-                }
-              }, 1200);
-            } else {
-              // Modos no-continuos: cerrar tras escanear
-              setTimeout(() => {
-                closeCameraScanner();
-                _processScan(code);
-              }, 350);
-              return; // detener loop
-            }
+            }, 350);
+            return; // detener loop
           }
         }
       } catch {}
