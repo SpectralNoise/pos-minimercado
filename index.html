@@ -3074,6 +3074,45 @@ function normalizarVenta(v) {
   };
 }
 
+// ─── DATA CACHE (F1: hidratación instantánea) ───────────────────────
+const POS_CACHE_KEY     = 'pos_data_cache';
+const POS_CACHE_VERSION = 1;
+const POS_CACHE_MAX_AGE = 24 * 60 * 60 * 1000; // 24h
+
+function _saveDataCache() {
+  try {
+    localStorage.setItem(POS_CACHE_KEY, JSON.stringify({
+      v:          POS_CACHE_VERSION,
+      ts:         Date.now(),
+      tienda_id:  currentUser?.tienda?.id ?? null,
+      products:   products,
+      sales:      sales.map(s => ({ ...s, date: s.date instanceof Date ? s.date.toISOString() : s.date })),
+      cajaSession: cajaSession ? {
+        ...cajaSession,
+        inicio: cajaSession.inicio instanceof Date ? cajaSession.inicio.toISOString() : cajaSession.inicio
+      } : null
+    }));
+  } catch(e) { /* localStorage lleno — fallar en silencio */ }
+}
+
+function _readDataCache(expectedTiendaId) {
+  try {
+    const raw = localStorage.getItem(POS_CACHE_KEY);
+    if (!raw) return null;
+    const d = JSON.parse(raw);
+    if (d.v !== POS_CACHE_VERSION) return null;
+    if (Date.now() - d.ts > POS_CACHE_MAX_AGE) return null;
+    if (expectedTiendaId !== undefined && d.tienda_id !== expectedTiendaId) return null;
+    d.sales = (d.sales || []).map(s => ({ ...s, date: new Date(s.date) }));
+    if (d.cajaSession?.inicio) d.cajaSession.inicio = new Date(d.cajaSession.inicio);
+    return d;
+  } catch(e) { return null; }
+}
+
+function _clearDataCache() {
+  localStorage.removeItem(POS_CACHE_KEY);
+}
+
 async function loadData() {
   try {
     const [pRes, vRes, tRes] = await Promise.all([
@@ -3099,6 +3138,7 @@ async function loadData() {
     }
     // Cargar thumbnails en background (no bloquea el render inicial)
     _loadThumbnailsBackground();
+    _saveDataCache(); // F1: persistir estado para hidratación instantánea
   } catch (err) {
     showToast('⚠ Error cargando datos del servidor');
   }
