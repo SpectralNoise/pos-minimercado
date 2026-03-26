@@ -4044,9 +4044,8 @@ async function completarVenta() {
     }
     // Refrescar stock desde servidor en segundo plano (confirmar descuentos exactos)
     apiFetch('/api/productos').then(r => r && r.json()).then(serverProds => {
-      if (serverProds) { products = serverProds; _loadThumbnailsBackground(); updateLowStockBadge(); renderProducts(); }
+      if (serverProds) { products = serverProds; _loadThumbnailsBackground(); updateLowStockBadge(); renderProducts(); _saveDataCache(); }
     }).catch(() => { /* stock se sincroniza en la próxima carga */ });
-    _saveDataCache(); // F1: mantener caché actualizada tras venta confirmada
   } catch (err) {
     // Revertir estado optimista — el servidor rechazó la venta
     closeModal('modal-recibo');
@@ -4056,6 +4055,7 @@ async function completarVenta() {
     if (idx !== -1) sales.splice(idx, 1);
     if (cajaSession) cajaSession.ventasIds = cajaSession.ventasIds.filter(id => id !== tempId);
     lastSale = null;
+    if (btnCobrar) btnCobrar.disabled = false;
     showToast('⚠ Error al registrar venta: ' + err.message);
     openModal('modal-pago'); // reabrir para que el cajero reintente
   }
