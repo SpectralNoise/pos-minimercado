@@ -3117,30 +3117,35 @@ function _clearDataCache() {
 
 async function loadData() {
   try {
-    const [pRes, vRes, tRes] = await Promise.all([
-      apiFetch('/api/productos'),
-      apiFetch('/api/ventas'),
-      apiFetch('/api/turnos/activo')
-    ]);
-    if (!pRes || !vRes || !tRes) return; // sesión expirada
-    if (!pRes.ok) { showToast(`⚠ Error cargando inventario (${pRes.status})`); return; }
-    products = await pRes.json();
+    const res = await apiFetch('/api/sync');
+    if (!res) return; // sesión expirada — apiFetch ya llamó showLoginScreen
+    if (!res.ok) { showToast(`⚠ Error cargando datos (${res.status})`); return; }
+    const sync = await res.json();
+
+    products = sync.productos;
     if (!Array.isArray(products)) { showToast('⚠ Respuesta de inventario inválida'); products = []; }
-    sales    = (await vRes.json()).map(normalizarVenta);
-    const turnoActivo = await tRes.json();
+
+    sales = (sync.ventas || []).map(normalizarVenta);
+
+    const turnoActivo = sync.turno;
     if (turnoActivo && turnoActivo.id) {
       cajaSession = {
         id:           turnoActivo.id,
         cajero:       turnoActivo.cajero,
-        inicio:       new Date(turnoActivo.apertura_at.replace(' ','T')),
+        inicio:       new Date(turnoActivo.apertura_at.replace(' ', 'T')),
         montoInicial: turnoActivo.monto_inicial,
         ventasIds:    sales.filter(s => s.turno_id === turnoActivo.id).map(s => s.id)
       };
       updateCajaBar();
+    } else if (cajaSession) {
+      // El turno fue cerrado externamente — limpiar sesión local
+      cajaSession = null;
+      updateCajaBar();
     }
+
     // Cargar thumbnails en background (no bloquea el render inicial)
     _loadThumbnailsBackground();
-    _saveDataCache(); // F1: persistir estado para hidratación instantánea
+    _saveDataCache(); // F1: mantener caché actualizada
   } catch (err) {
     showToast('⚠ Error cargando datos del servidor');
   }
