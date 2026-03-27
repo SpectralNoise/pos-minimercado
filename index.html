@@ -5023,7 +5023,7 @@ async function abrirCaja() {
       const cierreRes = await apiFetch(`/api/turnos/${t.id}/cierre`, {
         method: 'PUT',
         headers: {'Content-Type':'application/json'},
-        body: JSON.stringify({efectivo_ventas:0,transferencias:0,total_ventas:0,num_tx:0,monto_contado:null,diferencia:null,resumen_ia:null})
+        body: JSON.stringify({ monto_contado: null, diferencia: null, resumen_ia: null })
       });
       if (!cierreRes) return;
       if (!cierreRes.ok) { showToast('⚠ No se pudo cerrar el turno anterior'); return; }

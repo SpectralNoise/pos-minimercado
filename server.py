@@ -1776,6 +1776,16 @@ Al final, un consejo breve sobre los productos sin rotación."""
             body = self.read_json_body()
             conn = get_db()
             try:
+                # Calcular totales reales desde ventas — el cliente no es fuente de verdad
+                totals = conn.execute("""
+                    SELECT
+                        COALESCE(SUM(CASE WHEN metodo='efectivo' THEN total ELSE 0 END), 0) AS efectivo_ventas,
+                        COALESCE(SUM(CASE WHEN metodo='transferencia' THEN total ELSE 0 END), 0) AS transferencias,
+                        COALESCE(SUM(total), 0) AS total_ventas,
+                        COUNT(*) AS num_tx
+                    FROM ventas WHERE turno_id=?
+                """, (turno_id,)).fetchone()
+
                 tienda_filter = "" if ctx.rol == 'superadmin' else " AND tienda_id=?"
                 params_filter = () if ctx.rol == 'superadmin' else (ctx.tienda_id,)
                 conn.execute(
@@ -1783,8 +1793,8 @@ Al final, un consejo breve sobre los productos sin rotación."""
                         efectivo_ventas=?, transferencias=?, total_ventas=?, num_tx=?,
                         monto_contado=?, diferencia=?, resumen_ia=?
                        WHERE id=? AND estado='abierto'{tienda_filter}""",
-                    (body.get("efectivo_ventas",0), body.get("transferencias",0),
-                     body.get("total_ventas",0), body.get("num_tx",0),
+                    (totals["efectivo_ventas"], totals["transferencias"],
+                     totals["total_ventas"], totals["num_tx"],
                      body.get("monto_contado"), body.get("diferencia"),
                      body.get("resumen_ia"), turno_id) + params_filter
                 )
