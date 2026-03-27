@@ -2124,6 +2124,7 @@ button:not(:disabled):active {
       <button class="btn-secondary" onclick="exportCSV()">⬇ CSV</button>
       <button class="btn-secondary" id="btn-importar-factura" onclick="abrirModalFactura()" title="Importar factura de proveedor con IA (Plan Pro)">📄 <span class="btn-factura-label">Importar factura</span></button>
       <button class="btn-secondary" id="btn-pedido" onclick="generarPedido()" title="IA sugiere qué pedir esta semana">🛒 ¿Qué pedir?</button>
+      <button class="btn-secondary" onclick="abrirModalAjusteStock()" title="Registrar entrada de mercancía">📦 Entrada</button>
       <button class="btn-secondary" id="btn-refresh-inv" onclick="recargarInventario()" title="Actualizar inventario">🔄</button>
       <button class="btn-view-toggle" id="btn-view-toggle" onclick="toggleInvView()" title="Cambiar vista">⊞ Tarjetas</button>
       <button class="btn-primary" onclick="openProdModal()">+ Nuevo</button>
@@ -2179,6 +2180,7 @@ button:not(:disabled):active {
         <div class="period-tab" onclick="setPeriod('semana',this)">Semana</div>
         <div class="period-tab" onclick="setPeriod('mes',this)">Mes</div>
       </div>
+      <button class="btn-secondary" style="height:32px;font-size:12px;padding:0 10px" onclick="exportVentasCSV()" title="Exportar ventas del período en CSV">⬇ CSV</button>
     </div>
     <div class="kpi-grid">
       <div class="kpi-card">
@@ -2410,7 +2412,59 @@ button:not(:disabled):active {
       <button class="btn-receipt" onclick="printReceipt()">🖨 Imprimir</button>
       <button class="btn-receipt whatsapp" onclick="sendWhatsApp()">📱 WhatsApp</button>
     </div>
+    <button id="btn-anular-venta" class="btn-secondary" style="width:100%;margin-top:8px;color:var(--danger,#dc2626);border-color:var(--danger,#dc2626);display:none" onclick="abrirModalAnulacion()">🚫 Anular venta</button>
     <button class="btn-nueva-venta" onclick="nuevaVenta()">Nueva Venta</button>
+  </div>
+</div>
+
+<!-- MODAL: ANULACIÓN DE VENTA -->
+<div class="modal-overlay" id="modal-anulacion">
+  <div class="modal" style="max-width:360px">
+    <div class="modal-header">
+      <h2>🚫 Anular venta</h2>
+      <button class="btn-close" onclick="closeModal('modal-anulacion')">✕</button>
+    </div>
+    <div style="padding:0 0 16px">
+      <p style="color:var(--text-2);font-size:14px;margin-bottom:16px">
+        Esta acción restaura el stock de los productos y marca la venta como anulada. No se puede deshacer.
+      </p>
+      <div class="form-group">
+        <label>Motivo de anulación</label>
+        <select class="form-input" id="anulacion-motivo-sel" onchange="anulacionMotivoChange()">
+          <option value="">— Selecciona un motivo —</option>
+          <option value="Error en cobro">Error en cobro</option>
+          <option value="Producto no disponible">Producto no disponible</option>
+          <option value="El cliente no llevó el producto">El cliente no llevó el producto</option>
+          <option value="Precio incorrecto">Precio incorrecto</option>
+          <option value="otro">Otro...</option>
+        </select>
+      </div>
+      <div class="form-group" id="anulacion-otro-wrap" style="display:none">
+        <label>Especifica el motivo</label>
+        <input type="text" class="form-input" id="anulacion-motivo-otro" placeholder="Describe el motivo...">
+      </div>
+      <button class="btn-primary" style="width:100%;background:var(--danger,#dc2626);border-color:var(--danger,#dc2626)" onclick="confirmarAnulacion()">Confirmar anulación</button>
+    </div>
+  </div>
+</div>
+
+<!-- MODAL: AJUSTE DE STOCK -->
+<div class="modal-overlay" id="modal-ajuste-stock">
+  <div class="modal" style="max-width:480px">
+    <div class="modal-header">
+      <h2>📦 Entrada de inventario</h2>
+      <button class="btn-close" onclick="closeModal('modal-ajuste-stock')">✕</button>
+    </div>
+    <div style="padding:0 0 16px">
+      <p style="color:var(--text-2);font-size:13px;margin-bottom:12px">Agrega unidades al stock de uno o varios productos. Usa valores negativos para correcciones.</p>
+      <div id="ajuste-items-list" style="display:flex;flex-direction:column;gap:8px;margin-bottom:12px"></div>
+      <button class="btn-secondary" style="width:100%;margin-bottom:12px" onclick="agregarLineaAjuste()">+ Agregar producto</button>
+      <div class="form-group">
+        <label>Motivo / Proveedor</label>
+        <input type="text" class="form-input" id="ajuste-motivo" placeholder="Ej: Pedido Colanta, conteo físico...">
+      </div>
+      <button class="btn-primary" style="width:100%" onclick="guardarAjusteStock()">Guardar entrada</button>
+    </div>
   </div>
 </div>
 
@@ -3065,21 +3119,24 @@ let sales = [];
 // ─── API ───────────────────────────────────────
 function normalizarVenta(v) {
   return {
-    id:       v.id,
-    turno_id: v.turno_id ?? null,
-    total:    v.total,
-    method:   v.metodo,
-    recibido: v.recibido ?? v.total,
-    cambio:   (v.recibido ?? v.total) - v.total,
-    date:     new Date((v.created_at || '').replace(' ', 'T')),
-    items:    (v.items || []).map(i => ({ id: i.producto_id, name: i.name, emoji: i.emoji, qty: i.qty, price: i.price }))
+    id:               v.id,
+    turno_id:         v.turno_id ?? null,
+    total:            v.total,
+    method:           v.metodo,
+    recibido:         v.recibido ?? v.total,
+    cambio:           (v.recibido ?? v.total) - v.total,
+    date:             new Date((v.created_at || '').replace(' ', 'T')),
+    anulada:          v.status === 'anulada',
+    motivo_anulacion: v.motivo_anulacion ?? null,
+    anulada_at:       v.anulada_at ?? null,
+    items:            (v.items || []).map(i => ({ id: i.producto_id, name: i.name, emoji: i.emoji, qty: i.qty, price: i.price }))
   };
 }
 
 // ─── DATA CACHE (F1: hidratación instantánea) ───────────────────────
 const POS_CACHE_KEY     = 'pos_data_cache';
 const POS_CACHE_VERSION = 1;
-const POS_CACHE_MAX_AGE = 24 * 60 * 60 * 1000; // 24h
+const POS_CACHE_MAX_AGE = 2 * 60 * 60 * 1000; // 2h — evita precios desactualizados
 
 function _saveDataCache() {
   try {
@@ -4079,6 +4136,7 @@ function showRecibo() {
       <div class="r-store">${esc(currentUser?.tienda?.nombre || 'AESSPOS')}</div>
       <div class="r-sub">Sistema POS · Recibo de venta</div>
     </div>
+    ${s.anulada ? `<div style="text-align:center;background:rgba(220,38,38,.1);color:var(--danger,#dc2626);border-radius:8px;padding:8px;font-weight:700;font-size:13px;margin-bottom:8px">🚫 VENTA ANULADA${s.motivo_anulacion ? ' · ' + esc(s.motivo_anulacion) : ''}</div>` : ''}
     <hr class="receipt-divider">
     <div class="receipt-meta">
       <strong>Recibo #${s.id}</strong><br>
@@ -4226,6 +4284,7 @@ async function recargarInventario() {
     if (!res) return;
     if (!res.ok) { showToast('⚠ Error al actualizar'); return; }
     products = await res.json();
+    _saveDataCache();
     renderInventario();
     showToast('✅ Inventario actualizado');
     _loadThumbnailsBackground();
@@ -4785,6 +4844,23 @@ function exportCSV() {
   showToast('⬇ Exportando inventario...');
 }
 
+function exportVentasCSV() {
+  const todas = filterSalesByPeriodAll();
+  if (!todas.length) { showToast('⚠ Sin ventas en este período', 'warning'); return; }
+  const periodo = { hoy: 'hoy', semana: 'semana', mes: 'mes' }[currentPeriod] || currentPeriod;
+  const header = 'ID,Fecha,Hora,Método,Total,Estado,Motivo Anulación,Productos\n';
+  const rows = todas.map(s => {
+    const fecha = s.date.toLocaleDateString('es-CO');
+    const hora  = s.date.toLocaleTimeString('es-CO', {hour:'2-digit', minute:'2-digit'});
+    const items = s.items.map(i => `${i.name} x${i.qty}`).join(' | ');
+    return `${s.id},"${fecha}","${hora}","${s.method}",${s.total},"${s.anulada ? 'Anulada' : 'Completada'}","${s.motivo_anulacion || ''}","${items}"`;
+  }).join('\n');
+  const blob = new Blob(['\uFEFF' + header + rows], {type:'text/csv;charset=utf-8;'});
+  const a = document.createElement('a'); a.href = URL.createObjectURL(blob);
+  a.download = `ventas_${periodo}_${new Date().toISOString().slice(0,10)}.csv`; a.click();
+  showToast(`⬇ Exportando ${todas.length} ventas...`);
+}
+
 // ─── REPORTES ─────────────────────────────────
 function setPeriod(p, el) {
   currentPeriod = p;
@@ -4798,6 +4874,20 @@ function filterSalesByPeriod() {
   const todayStart  = new Date(now.getFullYear(), now.getMonth(), now.getDate());
   const weekStart   = new Date(now.getFullYear(), now.getMonth(), now.getDate() - 6);
   const monthStart  = new Date(now.getFullYear(), now.getMonth(), 1);
+  return sales.filter(s => {
+    if (s.anulada) return false;
+    if (currentPeriod === 'hoy')    return s.date >= todayStart;
+    if (currentPeriod === 'semana') return s.date >= weekStart;
+    return s.date >= monthStart;
+  });
+}
+
+// Igual que filterSalesByPeriod pero incluye anuladas (para lista de historial)
+function filterSalesByPeriodAll() {
+  const now = new Date();
+  const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  const weekStart  = new Date(now.getFullYear(), now.getMonth(), now.getDate() - 6);
+  const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
   return sales.filter(s => {
     if (currentPeriod === 'hoy')    return s.date >= todayStart;
     if (currentPeriod === 'semana') return s.date >= weekStart;
@@ -4819,7 +4909,33 @@ function renderReportes() {
   document.getElementById('kpi-transf').textContent = fmt(transf);
   document.getElementById('kpi-ef-pct').textContent = total ? `${Math.round(efectivo/total*100)}% del total` : '0% del total';
   document.getElementById('kpi-tr-pct').textContent = total ? `${Math.round(transf/total*100)}% del total` : '0% del total';
-  document.getElementById('kpi-delta').textContent = '↑ ' + (filtered.length ? Math.floor(Math.random()*20+5) : 0) + '%';
+  // C1: delta real vs período anterior (mismo rango de días hacia atrás)
+  (function() {
+    const now = new Date();
+    let prevStart, prevEnd;
+    if (currentPeriod === 'hoy') {
+      prevStart = new Date(now.getFullYear(), now.getMonth(), now.getDate() - 1);
+      prevEnd   = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    } else if (currentPeriod === 'semana') {
+      prevStart = new Date(now.getFullYear(), now.getMonth(), now.getDate() - 13);
+      prevEnd   = new Date(now.getFullYear(), now.getMonth(), now.getDate() - 6);
+    } else {
+      prevStart = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+      prevEnd   = new Date(now.getFullYear(), now.getMonth(), 1);
+    }
+    const prevTotal = sales
+      .filter(s => !s.anulada && s.date >= prevStart && s.date < prevEnd)
+      .reduce((s,x) => s + x.total, 0);
+    const deltaEl = document.getElementById('kpi-delta');
+    if (prevTotal === 0) {
+      deltaEl.textContent = total > 0 ? '↑ Nuevo' : '—';
+      deltaEl.className = 'kpi-delta' + (total > 0 ? ' up' : '');
+    } else {
+      const pct = Math.round((total - prevTotal) / prevTotal * 100);
+      deltaEl.textContent = (pct >= 0 ? '↑ ' : '↓ ') + Math.abs(pct) + '% vs período anterior';
+      deltaEl.className = 'kpi-delta ' + (pct >= 0 ? 'up' : 'down');
+    }
+  })();
 
   // Margen de ganancia estimado (solo si hay productos con precio_compra)
   const prodConCosto = products.filter(p => p.precio_compra > 0);
@@ -4827,7 +4943,8 @@ function renderReportes() {
   if (prodConCosto.length > 0 && filtered.length > 0) {
     let gananciaTotal = 0, ventaTotal = 0;
     filtered.forEach(s => s.items.forEach(i => {
-      const prod = products.find(p => p.name === i.name);
+      // I2: buscar por ID (producto_id) en lugar de nombre para no romper con renombres
+      const prod = i.id ? products.find(p => p.id === i.id) : products.find(p => p.name === i.name);
       if (prod && prod.precio_compra > 0) {
         gananciaTotal += (prod.price - prod.precio_compra) * i.qty;
         ventaTotal    += prod.price * i.qty;
@@ -4843,20 +4960,23 @@ function renderReportes() {
     margenCard.style.display = 'none';
   }
 
-  // Transactions list
+  // Transactions list — incluye anuladas con badge para auditoría
   const txList = document.getElementById('tx-list');
-  if (!filtered.length) {
+  const allPeriod = filterSalesByPeriodAll(); // todas, incluyendo anuladas
+  if (!allPeriod.length) {
     txList.innerHTML = `<div style="padding:40px;text-align:center;color:var(--text-3);font-family:var(--ff-disp);font-size:18px;text-transform:uppercase;letter-spacing:.05em">Sin ventas en este período</div>`;
   } else {
-    txList.innerHTML = filtered.map((s,i) => `
-      <div class="tx-item" onclick="viewSale(${s.id})">
+    txList.innerHTML = allPeriod.map((s,i) => `
+      <div class="tx-item${s.anulada ? ' anulada' : ''}" onclick="viewSale(${s.id})" style="${s.anulada ? 'opacity:.55' : ''}">
         <div class="tx-num">#${s.id}</div>
         <div class="tx-info">
           <div class="tx-items-txt">${s.items.slice(0,2).map(i=>esc(i.name)).join(', ')}${s.items.length>2?` +${s.items.length-2} más`:''}</div>
           <div class="tx-time">${s.date.toLocaleTimeString('es-CO',{hour:'2-digit',minute:'2-digit'})} · ${s.items.reduce((a,i)=>a+i.qty,0)} ítem${s.items.reduce((a,i)=>a+i.qty,0)!==1?'s':''}</div>
         </div>
-        <span class="tx-method ${s.method}">${s.method==='efectivo'?'💵 Efectivo':'📲 Transfer.'}</span>
-        <div class="tx-amount">${fmt(s.total)}</div>
+        ${s.anulada
+          ? `<span style="font-size:11px;background:rgba(220,38,38,.12);color:var(--danger,#dc2626);border-radius:4px;padding:2px 7px;font-weight:700">ANULADA</span>`
+          : `<span class="tx-method ${s.method}">${s.method==='efectivo'?'💵 Efectivo':'📲 Transfer.'}</span>`}
+        <div class="tx-amount" style="${s.anulada ? 'text-decoration:line-through;color:var(--text-3)' : ''}">${fmt(s.total)}</div>
       </div>
     `).join('');
   }
@@ -4934,7 +5054,135 @@ async function renderTurnos() {
 
 function viewSale(id) {
   lastSale = sales.find(s => s.id === id);
-  if (lastSale) showRecibo();
+  if (!lastSale) return;
+  showRecibo();
+  // Mostrar botón anular solo para admin en ventas no anuladas
+  const btnAnular = document.getElementById('btn-anular-venta');
+  if (btnAnular) {
+    const puedeAnular = currentUser?.rol === 'admin' && !lastSale.anulada;
+    btnAnular.style.display = puedeAnular ? '' : 'none';
+  }
+}
+
+// ─── ANULACIÓN DE VENTAS ─────────────────────────────────────────
+function abrirModalAnulacion() {
+  document.getElementById('anulacion-motivo-sel').value = '';
+  document.getElementById('anulacion-motivo-otro').value = '';
+  document.getElementById('anulacion-otro-wrap').style.display = 'none';
+  openModal('modal-anulacion');
+}
+
+function anulacionMotivoChange() {
+  const sel = document.getElementById('anulacion-motivo-sel').value;
+  document.getElementById('anulacion-otro-wrap').style.display = sel === 'otro' ? '' : 'none';
+}
+
+async function confirmarAnulacion() {
+  if (!lastSale) return;
+  const sel = document.getElementById('anulacion-motivo-sel').value;
+  const otro = document.getElementById('anulacion-motivo-otro').value.trim();
+  const motivo = sel === 'otro' ? otro : sel;
+  if (!motivo) { showToast('⚠ Selecciona un motivo', 'warning'); return; }
+
+  const btn = document.querySelector('#modal-anulacion .btn-primary');
+  btn.disabled = true; btn.textContent = '⏳ Anulando...';
+  try {
+    const res = await apiFetch(`/api/ventas/${lastSale.id}/anular`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ motivo })
+    });
+    if (!res) { btn.disabled = false; btn.textContent = 'Confirmar anulación'; return; }
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || 'Error desconocido');
+
+    // Actualizar estado local
+    const idx = sales.findIndex(s => s.id === lastSale.id);
+    if (idx !== -1) {
+      sales[idx].anulada          = true;
+      sales[idx].motivo_anulacion = motivo;
+    }
+    lastSale.anulada = true;
+    // Restaurar stock localmente
+    lastSale.items.forEach(item => {
+      const prod = products.find(p => p.id === item.id);
+      if (prod) prod.stock += item.qty;
+    });
+    _saveDataCache();
+    closeModal('modal-anulacion');
+    closeModal('modal-recibo');
+    renderReportes();
+    renderProducts();
+    updateLowStockBadge();
+    showToast('✅ Venta anulada — stock restaurado');
+  } catch(err) {
+    showToast('⚠ Error al anular: ' + err.message);
+    btn.disabled = false; btn.textContent = 'Confirmar anulación';
+  }
+}
+
+// ─── AJUSTE DE STOCK ─────────────────────────────────────────────
+let _ajusteLineas = [];
+
+function abrirModalAjusteStock() {
+  _ajusteLineas = [];
+  document.getElementById('ajuste-motivo').value = '';
+  document.getElementById('ajuste-items-list').innerHTML = '';
+  openModal('modal-ajuste-stock');
+  agregarLineaAjuste();
+}
+
+function agregarLineaAjuste() {
+  const idx = _ajusteLineas.length;
+  _ajusteLineas.push({ producto_id: null, delta: 0 });
+  const div = document.createElement('div');
+  div.style.cssText = 'display:flex;gap:8px;align-items:center';
+  div.innerHTML = `
+    <select class="form-input" style="flex:1;font-size:13px" onchange="_ajusteLineas[${idx}].producto_id=parseInt(this.value)||null">
+      <option value="">— Producto —</option>
+      ${products.map(p => `<option value="${p.id}">${esc(p.emoji||'📦')} ${esc(p.name)} (stock: ${p.stock})</option>`).join('')}
+    </select>
+    <input type="number" class="form-input mono" style="width:90px;text-align:right" placeholder="Unidades"
+      onchange="_ajusteLineas[${idx}].delta=parseInt(this.value)||0" min="-9999" max="9999">
+    <button class="btn-icon" style="flex-shrink:0" onclick="this.parentElement.remove();_ajusteLineas.splice(${idx},1)">✕</button>
+  `;
+  document.getElementById('ajuste-items-list').appendChild(div);
+}
+
+async function guardarAjusteStock() {
+  const motivo = document.getElementById('ajuste-motivo').value.trim() || 'Entrada de inventario';
+  const ajustes = _ajusteLineas
+    .filter(l => l.producto_id && l.delta !== 0)
+    .map(l => ({ producto_id: l.producto_id, delta: l.delta, motivo }));
+
+  if (!ajustes.length) { showToast('⚠ Agrega al menos un producto con cantidad', 'warning'); return; }
+
+  const btn = document.querySelector('#modal-ajuste-stock .btn-primary');
+  btn.disabled = true; btn.textContent = '⏳ Guardando...';
+  try {
+    const res = await apiFetch('/api/ajustes-stock', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ ajustes })
+    });
+    if (!res) { btn.disabled = false; btn.textContent = 'Guardar entrada'; return; }
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || 'Error');
+
+    // Actualizar stock localmente
+    (data.actualizados || []).forEach(({ id, stock }) => {
+      const prod = products.find(p => p.id === id);
+      if (prod) prod.stock = stock;
+    });
+    _saveDataCache();
+    closeModal('modal-ajuste-stock');
+    renderInventario();
+    updateLowStockBadge();
+    showToast(`✅ Stock actualizado — ${ajustes.length} producto${ajustes.length > 1 ? 's' : ''}`);
+  } catch(err) {
+    showToast('⚠ Error: ' + err.message);
+    btn.disabled = false; btn.textContent = 'Guardar entrada';
+  }
 }
 
 // ─── MODO (CAJERO / ADMIN) ────────────────────

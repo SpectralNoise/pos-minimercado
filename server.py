@@ -336,6 +336,31 @@ def init_db():
         )
     """)
     conn.commit()
+    # Migración: anulación de ventas
+    for col, definition in [
+        ('status',            "TEXT DEFAULT 'completada'"),
+        ('anulada_at',        'DATETIME DEFAULT NULL'),
+        ('motivo_anulacion',  'TEXT DEFAULT NULL'),
+    ]:
+        try:
+            conn.execute(f"ALTER TABLE ventas ADD COLUMN {col} {definition}")
+            conn.commit()
+        except (sqlite3.OperationalError, ValueError) as e:
+            if "duplicate column name" not in str(e):
+                raise
+    # Migración: ajuste de stock (entradas de inventario)
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS ajustes_stock (
+            id          INTEGER PRIMARY KEY AUTOINCREMENT,
+            producto_id INTEGER NOT NULL REFERENCES productos(id),
+            tienda_id   INTEGER REFERENCES tiendas(id),
+            delta       INTEGER NOT NULL,
+            motivo      TEXT,
+            usuario     TEXT,
+            created_at  DATETIME DEFAULT CURRENT_TIMESTAMP
+        )
+    """)
+    conn.commit()
     # Seed superadmin (solo si no hay usuarios)
     if conn.execute("SELECT COUNT(*) FROM usuarios").fetchone()[0] == 0:
         _pw = secrets.token_urlsafe(12)
@@ -1012,10 +1037,10 @@ class Handler(BaseHTTPRequestHandler):
             conn = get_db()
             try:
                 if ctx.rol == 'superadmin':
-                    ventas = conn.execute("SELECT * FROM ventas ORDER BY created_at DESC LIMIT 500").fetchall()
+                    ventas = conn.execute("SELECT * FROM ventas ORDER BY created_at DESC LIMIT 2000").fetchall()
                 else:
                     ventas = conn.execute(
-                        "SELECT * FROM ventas WHERE tienda_id=? ORDER BY created_at DESC LIMIT 500",
+                        "SELECT * FROM ventas WHERE tienda_id=? ORDER BY created_at DESC LIMIT 2000",
                         (ctx.tienda_id,)
                     ).fetchall()
                 result = []
@@ -1140,8 +1165,15 @@ class Handler(BaseHTTPRequestHandler):
                 self.send_error_json("Ruta no encontrada", 404)
         elif self.path == "/api/admin/compress-thumbnails":
             self._compress_all_thumbnails()
+        elif self.path == "/api/ajustes-stock":
+            self._crear_ajuste_stock()
         else:
-            self.send_error_json("Ruta no encontrada", 404)
+            # POST /api/ventas/:id/anular
+            parts = self.path.split("/")
+            if len(parts) == 5 and parts[2] == "ventas" and parts[4] == "anular" and parts[3].isdigit():
+                self._anular_venta(int(parts[3]))
+            else:
+                self.send_error_json("Ruta no encontrada", 404)
 
     # ── PUT ────────────────────────────────────────────────────────
     def do_PUT(self):
@@ -1345,6 +1377,102 @@ class Handler(BaseHTTPRequestHandler):
             row = conn.execute("SELECT * FROM ventas WHERE id=?", (venta_id,)).fetchone()
             conn.commit(); conn.close()
             self.send_json({"ok": True, "venta": row_to_dict(row)}, 201)
+        except Exception as e:
+            self.send_error_json(str(e), 500)
+
+    # ── ANULACIÓN DE VENTAS ────────────────────────────────────────
+    def _anular_venta(self, venta_id):
+        """Soft-delete de una venta: restaura stock y la marca como anulada."""
+        ctx = self.require_auth()
+        if not ctx: return
+        if ctx.rol == 'cajero':
+            self.send_error_json("Solo admin puede anular ventas", 403); return
+        try:
+            body = self.read_json_body()
+            motivo = (body.get("motivo") or "").strip()
+            if not motivo:
+                self.send_error_json("Falta el motivo de anulación", 400); return
+            conn = get_db()
+            try:
+                venta = conn.execute(
+                    "SELECT * FROM ventas WHERE id=? AND tienda_id=?",
+                    (venta_id, ctx.tienda_id)
+                ).fetchone()
+                if not venta:
+                    self.send_error_json("Venta no encontrada", 404); return
+                if venta["status"] == "anulada":
+                    self.send_error_json("Esta venta ya fue anulada", 409); return
+                # Restaurar stock de cada ítem
+                items = conn.execute(
+                    "SELECT * FROM items_venta WHERE venta_id=?", (venta_id,)
+                ).fetchall()
+                for item in items:
+                    if item["producto_id"]:
+                        conn.execute(
+                            "UPDATE productos SET stock = stock + ? WHERE id=? AND tienda_id=?",
+                            (item["qty"], item["producto_id"], ctx.tienda_id)
+                        )
+                # Marcar como anulada
+                conn.execute(
+                    """UPDATE ventas SET status='anulada', anulada_at=CURRENT_TIMESTAMP,
+                       motivo_anulacion=? WHERE id=?""",
+                    (motivo, venta_id)
+                )
+                conn.commit()
+                venta_actualizada = conn.execute(
+                    "SELECT * FROM ventas WHERE id=?", (venta_id,)
+                ).fetchone()
+                self.send_json({"ok": True, "venta": row_to_dict(venta_actualizada)})
+            finally:
+                conn.close()
+        except Exception as e:
+            self.send_error_json(str(e), 500)
+
+    # ── AJUSTE DE STOCK (ENTRADA DE INVENTARIO) ────────────────────
+    def _crear_ajuste_stock(self):
+        """Ajusta el stock de uno o varios productos (entrada de mercancía)."""
+        ctx = self.require_auth()
+        if not ctx: return
+        if ctx.rol == 'cajero':
+            self.send_error_json("Solo admin puede ajustar stock", 403); return
+        try:
+            body = self.read_json_body()
+            ajustes = body.get("ajustes", [])  # [{producto_id, delta, motivo}]
+            if not ajustes:
+                self.send_error_json("Sin ajustes", 400); return
+            conn = get_db()
+            try:
+                productos_actualizados = []
+                for aj in ajustes:
+                    prod_id = int(aj.get("producto_id", 0))
+                    delta   = int(aj.get("delta", 0))
+                    motivo  = (aj.get("motivo") or "Entrada de inventario").strip()
+                    usuario = ctx.user_id
+                    if delta == 0:
+                        continue
+                    # Verificar que el producto pertenece a la tienda
+                    prod = conn.execute(
+                        "SELECT id, stock FROM productos WHERE id=? AND tienda_id=?",
+                        (prod_id, ctx.tienda_id)
+                    ).fetchone()
+                    if not prod:
+                        continue
+                    conn.execute(
+                        "UPDATE productos SET stock = MAX(0, stock + ?) WHERE id=? AND tienda_id=?",
+                        (delta, prod_id, ctx.tienda_id)
+                    )
+                    conn.execute(
+                        "INSERT INTO ajustes_stock (producto_id, tienda_id, delta, motivo, usuario) VALUES (?,?,?,?,?)",
+                        (prod_id, ctx.tienda_id, delta, motivo, usuario)
+                    )
+                    nuevo_stock = conn.execute(
+                        "SELECT stock FROM productos WHERE id=?", (prod_id,)
+                    ).fetchone()["stock"]
+                    productos_actualizados.append({"id": prod_id, "stock": nuevo_stock})
+                conn.commit()
+                self.send_json({"ok": True, "actualizados": productos_actualizados})
+            finally:
+                conn.close()
         except Exception as e:
             self.send_error_json(str(e), 500)
 
@@ -1665,14 +1793,14 @@ Al final, un consejo breve sobre los productos sin rotación."""
                 ).fetchall()
             productos = [row_to_dict(r) for r in prod_rows]
 
-            # ── Ventas (últimas 500) ─────────────────────────────────────
+            # ── Ventas (últimas 2000 — ~40 días para tienda activa) ──────────
             if ctx.rol == 'superadmin':
                 venta_rows = conn.execute(
-                    "SELECT * FROM ventas ORDER BY created_at DESC LIMIT 500"
+                    "SELECT * FROM ventas ORDER BY created_at DESC LIMIT 2000"
                 ).fetchall()
             else:
                 venta_rows = conn.execute(
-                    "SELECT * FROM ventas WHERE tienda_id=? ORDER BY created_at DESC LIMIT 500",
+                    "SELECT * FROM ventas WHERE tienda_id=? ORDER BY created_at DESC LIMIT 2000",
                     (ctx.tienda_id,)
                 ).fetchall()
             ventas = []
