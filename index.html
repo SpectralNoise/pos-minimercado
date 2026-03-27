@@ -5140,6 +5140,8 @@ function calcDiferencia() {
 }
 
 async function cerrarCaja() {
+  if (!cajaSession) { closeModal('modal-cierre'); return; }
+
   const contado = parseMoney('cierre-contado');
   if (document.getElementById('cierre-contado').value === '') {
     showToast('⚠ Ingresa el efectivo contado'); return;
@@ -5151,6 +5153,17 @@ async function cerrarCaja() {
   const total_ventas   = efectivo + transferencias;
   const esperado       = cajaSession.montoInicial + efectivo;
   const diferencia     = contado - esperado;
+
+  // Confirmar si hay faltante significativo (más de $1.000)
+  if (diferencia < -1000) {
+    const faltanteStr = fmt(Math.abs(diferencia));
+    const confirmar = window.confirm(
+      `⚠ Hay un faltante de ${faltanteStr} en caja.\n\n` +
+      `¿Revisaste bien el efectivo antes de cerrar?\n\n` +
+      `Presiona Aceptar para registrar el faltante y cerrar el turno.`
+    );
+    if (!confirmar) return;
+  }
 
   const iaTexto = document.getElementById('cierre-ia-texto');
   const resumen_ia = (iaTexto && iaTexto.textContent && !iaTexto.textContent.startsWith('⏳'))
