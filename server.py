@@ -1485,7 +1485,8 @@ class Handler(BaseHTTPRequestHandler):
         if not ANTHROPIC_API_KEY:
             self.send_error_json("ANTHROPIC_API_KEY no configurada"); return
         try:
-            body       = self.read_json_body()
+            body = self.read_json_body(max_size=15_000_000)  # fotos de facturas pueden ser grandes
+            if body is None: return
             image_b64  = body.get("image")
             media_type = body.get("mediaType", "image/jpeg")
             if not image_b64:
